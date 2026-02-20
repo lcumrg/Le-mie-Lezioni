@@ -42,6 +42,7 @@ export default function ImpostazioniPage() {
   // --- Ore scolastiche ---
   const [oreLezione, setOreLezione] = useState([])
   const [giornoLibero, setGiornoLibero] = useState(null)
+  const [dataFineScuola, setDataFineScuola] = useState('')
   const [savingOre, setSavingOre] = useState(false)
 
   // --- Orari ---
@@ -72,6 +73,7 @@ export default function ImpostazioniPage() {
       setOreLezione(annoConfig.oreLezione)
     }
     setGiornoLibero(annoConfig?.giornoLibero ?? null)
+    setDataFineScuola(annoConfig?.dataFineScuola || '')
   }, [annoConfig])
 
   // Keep orarioForm.giorno valid (skip giorno libero)
@@ -155,6 +157,7 @@ export default function ImpostazioniPage() {
           ...(config?.anniScolastici?.[annoAttivo] || {}),
           oreLezione,
           giornoLibero,
+          dataFineScuola: dataFineScuola || null,
         },
       },
     })
@@ -410,6 +413,22 @@ export default function ImpostazioniPage() {
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Data fine scuola */}
+          <div className="mb-5">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Ultimo giorno di scuola
+            </label>
+            <input
+              type="date"
+              value={dataFineScuola}
+              onChange={(e) => setDataFineScuola(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            />
+            <p className="mt-1 text-xs text-gray-400">
+              Serve per calcolare le ore rimanenti per ogni classe.
+            </p>
           </div>
 
           <button

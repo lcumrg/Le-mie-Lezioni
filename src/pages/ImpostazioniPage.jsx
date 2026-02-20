@@ -8,6 +8,9 @@ import {
   onOrari,
   addOrario,
   deleteOrario,
+  onVacanze,
+  addVacanza,
+  deleteVacanza,
 } from '../lib/firestore'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 
@@ -45,6 +48,15 @@ export default function ImpostazioniPage() {
   const [dataFineScuola, setDataFineScuola] = useState('')
   const [savingOre, setSavingOre] = useState(false)
 
+  // --- Vacanze/Assenze ---
+  const [vacanze, setVacanze] = useState([])
+  const [vacanzaForm, setVacanzaForm] = useState({
+    nome: '',
+    dataInizio: '',
+    dataFine: '',
+    tipo: 'vacanza',
+  })
+
   // --- Orari ---
   const [orari, setOrari] = useState([])
   const [orarioForm, setOrarioForm] = useState({
@@ -54,12 +66,13 @@ export default function ImpostazioniPage() {
     materia: '',
   })
 
-  // Load assegnazioni & orari when annoAttivo changes
+  // Load assegnazioni, orari, vacanze when annoAttivo changes
   useEffect(() => {
     if (!annoAttivo) return
     const unsub1 = onAssegnazioni(annoAttivo, setAssegnazioni)
     const unsub2 = onOrari(annoAttivo, setOrari)
-    return () => { unsub1(); unsub2() }
+    const unsub3 = onVacanze(annoAttivo, setVacanze)
+    return () => { unsub1(); unsub2(); unsub3() }
   }, [annoAttivo])
 
   // Pre-fill anno input
@@ -162,6 +175,25 @@ export default function ImpostazioniPage() {
       },
     })
     setSavingOre(false)
+  }
+
+  // ── Vacanze handlers ──
+
+  async function handleAddVacanza(e) {
+    e.preventDefault()
+    if (!vacanzaForm.nome.trim() || !vacanzaForm.dataInizio || !annoAttivo) return
+    await addVacanza({
+      annoScolastico: annoAttivo,
+      nome: vacanzaForm.nome.trim(),
+      dataInizio: vacanzaForm.dataInizio,
+      dataFine: vacanzaForm.dataFine || vacanzaForm.dataInizio,
+      tipo: vacanzaForm.tipo,
+    })
+    setVacanzaForm({ nome: '', dataInizio: '', dataFine: '', tipo: 'vacanza' })
+  }
+
+  async function handleDeleteVacanza(id) {
+    await deleteVacanza(id)
   }
 
   // ── Orario settimanale handlers ──
@@ -442,7 +474,114 @@ export default function ImpostazioniPage() {
         </section>
       )}
 
-      {/* ── 4. Orario Settimanale ── */}
+      {/* ── 4. Vacanze e Assenze ── */}
+      {annoAttivo && (
+        <section className="bg-white rounded-lg border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Vacanze e Assenze
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Inserisci periodi di vacanza, chiusure e giorni di assenza personale. Servono per calcolare le ore effettive disponibili.
+          </p>
+
+          <form onSubmit={handleAddVacanza} className="flex flex-wrap items-end gap-3 mb-4">
+            <div className="flex-1 min-w-[140px]">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+              <input
+                type="text"
+                value={vacanzaForm.nome}
+                onChange={(e) => setVacanzaForm((f) => ({ ...f, nome: e.target.value }))}
+                placeholder="es. Vacanze di Natale"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Dal</label>
+              <input
+                type="date"
+                value={vacanzaForm.dataInizio}
+                onChange={(e) => setVacanzaForm((f) => ({ ...f, dataInizio: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Al</label>
+              <input
+                type="date"
+                value={vacanzaForm.dataFine}
+                onChange={(e) => setVacanzaForm((f) => ({ ...f, dataFine: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+              <select
+                value={vacanzaForm.tipo}
+                onChange={(e) => setVacanzaForm((f) => ({ ...f, tipo: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              >
+                <option value="vacanza">Vacanza</option>
+                <option value="chiusura">Chiusura</option>
+                <option value="assenza">Assenza personale</option>
+              </select>
+            </div>
+            <button
+              type="submit"
+              disabled={!vacanzaForm.nome.trim() || !vacanzaForm.dataInizio}
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              Aggiungi
+            </button>
+          </form>
+
+          {vacanze.length > 0 ? (
+            <div className="space-y-2">
+              {[...vacanze]
+                .sort((a, b) => a.dataInizio.localeCompare(b.dataInizio))
+                .map((v) => (
+                  <div
+                    key={v.id}
+                    className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                          v.tipo === 'vacanza'
+                            ? 'bg-orange-100 text-orange-700'
+                            : v.tipo === 'chiusura'
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-yellow-100 text-yellow-700'
+                        }`}
+                      >
+                        {v.tipo === 'vacanza' ? 'Vacanza' : v.tipo === 'chiusura' ? 'Chiusura' : 'Assenza'}
+                      </span>
+                      <span className="text-sm font-medium text-gray-800">{v.nome}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-gray-500 font-mono">
+                        {v.dataInizio === v.dataFine
+                          ? v.dataInizio
+                          : `${v.dataInizio} → ${v.dataFine}`}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteVacanza(v.id)}
+                        className="text-red-400 hover:text-red-600"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">Nessuna vacanza o assenza inserita.</p>
+          )}
+        </section>
+      )}
+
+      {/* ── 5. Orario Settimanale ── */}
       {annoAttivo && assegnazioni.length > 0 && (
         <section className="bg-white rounded-lg border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">

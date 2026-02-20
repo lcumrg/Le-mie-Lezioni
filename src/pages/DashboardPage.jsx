@@ -6,10 +6,11 @@ import {
   onOrari,
   onPercorsi,
   onUnita,
+  onVacanze,
   updateLezione,
 } from '../lib/firestore'
 import { getWeekRange } from '../lib/settimane'
-import { format, addDays, isToday, differenceInCalendarWeeks, parseISO } from 'date-fns'
+import { format, addDays, isToday, parseISO, startOfWeek, isBefore, isAfter } from 'date-fns'
 import { it } from 'date-fns/locale'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 
@@ -42,6 +43,7 @@ export default function DashboardPage() {
   const [orari, setOrari] = useState([])
   const [percorsi, setPercorsi] = useState([])
   const [unitaMap, setUnitaMap] = useState({}) // unitaId -> { titolo, ... }
+  const [vacanze, setVacanze] = useState([])
   const [weekOffset, setWeekOffset] = useState(0)
   const [loading, setLoading] = useState(true)
 
@@ -75,6 +77,7 @@ export default function DashboardPage() {
       })
     )
     unsubs.push(onOrari(annoAttivo, setOrari))
+    unsubs.push(onVacanze(annoAttivo, setVacanze))
     unsubs.push(
       onPercorsi((all) => {
         setPercorsi(all.filter((p) => p.annoScolastico === annoAttivo))
@@ -168,31 +171,49 @@ export default function DashboardPage() {
   const percorsoMap = {}
   for (const p of percorsi) percorsoMap[p.id] = p
 
-  // ── Remaining hours calculation ──
+  // ── Remaining hours calculation (precise, accounting for vacanze) ──
   let oreRimanentiPerClasse = null
   if (dataFineScuola && orari.length > 0) {
     const fineScuola = parseISO(dataFineScuola)
     const oggi = new Date()
     if (fineScuola > oggi) {
-      const settimaneRimanenti = differenceInCalendarWeeks(fineScuola, oggi, { weekStartsOn: 1 }) + 1
+      // Unique classes
+      const classiInOrario = [...new Set(orari.map((o) => `${o.classe}|${o.materia}`))]
 
-      // Count weekly hours per class (excluding giorno libero)
+      // Walk through weeks from today to end of school
       const orePerClasse = {}
-      for (const o of orari) {
-        if (o.giorno === giornoLibero) continue
-        const key = `${o.classe}|${o.materia}`
-        orePerClasse[key] = (orePerClasse[key] || 0) + (o.ore || 1)
+      let current = startOfWeek(oggi, { weekStartsOn: 1 })
+
+      while (isBefore(current, fineScuola)) {
+        for (let d = 0; d < 6; d++) {
+          if (d === giornoLibero) continue
+          const day = addDays(current, d)
+          if (isAfter(day, fineScuola)) continue
+
+          // Check if this day is a vacation
+          const isVacDay = vacanze.some((v) => {
+            const vStart = parseISO(v.dataInizio)
+            const vEnd = parseISO(v.dataFine)
+            return !isBefore(day, vStart) && !isAfter(day, vEnd)
+          })
+          if (isVacDay) continue
+
+          // Count orari for each class on this day
+          const dayOrari = orari.filter((o) => o.giorno === d)
+          for (const o of dayOrari) {
+            const key = `${o.classe}|${o.materia}`
+            orePerClasse[key] = (orePerClasse[key] || 0) + (o.ore || 1)
+          }
+        }
+        current = addDays(current, 7)
       }
 
-      oreRimanentiPerClasse = Object.entries(orePerClasse).map(([key, oreSettimana]) => {
+      oreRimanentiPerClasse = Object.entries(orePerClasse).map(([key, totaleOre]) => {
         const [classe, materia] = key.split('|')
-        return {
-          classe,
-          materia,
-          oreSettimana,
-          settimaneRimanenti,
-          totaleOre: oreSettimana * settimaneRimanenti,
-        }
+        const oreSettimana = orari.filter(
+          (o) => o.classe === classe && o.giorno !== giornoLibero
+        ).reduce((s, o) => s + (o.ore || 1), 0)
+        return { classe, materia, oreSettimana, totaleOre }
       }).sort((a, b) => a.classe.localeCompare(b.classe))
     }
   }
@@ -475,7 +496,7 @@ export default function DashboardPage() {
             Ore rimanenti fino al {format(parseISO(dataFineScuola), 'd MMMM yyyy', { locale: it })}
           </h2>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {oreRimanentiPerClasse.map(({ classe, materia, oreSettimana, settimaneRimanenti, totaleOre }) => (
+            {oreRimanentiPerClasse.map(({ classe, materia, oreSettimana, totaleOre }) => (
               <div
                 key={`${classe}_${materia}`}
                 className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200"
@@ -488,7 +509,7 @@ export default function DashboardPage() {
                   <span className="text-lg font-bold text-blue-600">{totaleOre}</span>
                   <span className="text-xs text-gray-400 ml-0.5">h</span>
                   <div className="text-[10px] text-gray-400 leading-tight">
-                    {oreSettimana}h/sett &times; {settimaneRimanenti} sett
+                    {oreSettimana}h/sett (vacanze escluse)
                   </div>
                 </div>
               </div>

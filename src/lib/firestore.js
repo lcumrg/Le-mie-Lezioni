@@ -22,6 +22,7 @@ export const percorsiRef = collection(db, 'percorsi')
 export const assegnazioniRef = collection(db, 'assegnazioni')
 export const orariRef = collection(db, 'orari')
 export const lezioniRef = collection(db, 'lezioni')
+export const vacanzeRef = collection(db, 'vacanze')
 export const configRef = collection(db, 'config')
 
 // ── Subcollection helpers ──
@@ -190,6 +191,35 @@ export async function updateLezione(id, data) {
 
 export async function deleteLezione(id) {
   return deleteDoc(doc(db, 'lezioni', id))
+}
+
+// ── Vacanze ──
+
+export function onVacanze(annoScolastico, callback) {
+  const q = query(vacanzeRef, where('annoScolastico', '==', annoScolastico))
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+  })
+}
+
+export async function addVacanza(data) {
+  return addDoc(vacanzeRef, data)
+}
+
+export async function deleteVacanza(id) {
+  return deleteDoc(doc(db, 'vacanze', id))
+}
+
+// ── Distribuzioni (pianificazione settimanale per classe) ──
+
+export function onDistribuzioni(callback) {
+  return onSnapshot(doc(db, 'config', 'distribuzioni'), (snap) => {
+    callback(snap.exists() ? snap.data() : {})
+  })
+}
+
+export async function setDistribuzioniClasse(classe, settimane) {
+  return setDoc(doc(db, 'config', 'distribuzioni'), { [classe]: settimane }, { merge: true })
 }
 
 export function onLezioniByPercorso(percorsoId, callback) {

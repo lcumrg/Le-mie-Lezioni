@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import CalendarioPage from './pages/CalendarioPage'
 import PercorsiPage from './pages/PercorsiPage'
+import ProgrammazionePage from './pages/ProgrammazionePage'
 import ArchivioPage from './pages/ArchivioPage'
 import ImpostazioniPage from './pages/ImpostazioniPage'
 import LoadingSpinner from './components/common/LoadingSpinner'
@@ -47,6 +48,7 @@ function AppRoutes() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/calendario" element={<CalendarioPage />} />
         <Route path="/percorsi" element={<PercorsiPage />} />
+        <Route path="/programmazione" element={<ProgrammazionePage />} />
         <Route path="/archivio" element={<ArchivioPage />} />
         <Route path="/impostazioni" element={<ImpostazioniPage />} />
       </Route>

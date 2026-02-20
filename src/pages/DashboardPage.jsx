@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../contexts/AppContext'
+import { useToast } from '../contexts/ToastContext'
 import {
   onLezioniSettimana,
   onAssegnazioni,
@@ -10,34 +11,41 @@ import {
   updateLezione,
 } from '../lib/firestore'
 import { getWeekRange } from '../lib/settimane'
+import {
+  STATO_LEZIONE,
+  STATO_LEZIONE_SHORT,
+  STATO_LEZIONE_LABEL,
+  STATI_LEZIONE,
+  GIORNI_LABEL,
+  GIORNI_SHORT,
+  ORE_ROMAN,
+} from '../lib/costanti'
 import { format, addDays, isToday, parseISO, startOfWeek, isBefore, isAfter } from 'date-fns'
 import { it } from 'date-fns/locale'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-
-const GIORNI = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
-const GIORNI_SHORT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
-const ORE_ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII']
+import ConfirmDialog from '../components/common/ConfirmDialog'
 
 const STATO_BADGE = {
-  pianificata: 'bg-blue-100 text-blue-700',
-  svolta: 'bg-green-100 text-green-700',
-  saltata: 'bg-red-100 text-red-700',
+  [STATO_LEZIONE.PIANIFICATA]: 'bg-blue-100 text-blue-700',
+  [STATO_LEZIONE.SVOLTA]: 'bg-green-100 text-green-700',
+  [STATO_LEZIONE.SALTATA]: 'bg-red-100 text-red-700',
 }
 
 const STATO_CELL = {
-  pianificata: 'bg-blue-50/70',
-  svolta: 'bg-green-50/70',
-  saltata: 'bg-red-50/60',
+  [STATO_LEZIONE.PIANIFICATA]: 'bg-blue-50/70',
+  [STATO_LEZIONE.SVOLTA]: 'bg-green-50/70',
+  [STATO_LEZIONE.SALTATA]: 'bg-red-50/60',
 }
 
 const STATO_CELL_BORDER = {
-  pianificata: 'border-l-blue-400',
-  svolta: 'border-l-green-500',
-  saltata: 'border-l-red-400',
+  [STATO_LEZIONE.PIANIFICATA]: 'border-l-blue-400',
+  [STATO_LEZIONE.SVOLTA]: 'border-l-green-500',
+  [STATO_LEZIONE.SALTATA]: 'border-l-red-400',
 }
 
 export default function DashboardPage() {
   const { annoAttivo, annoConfig, loading: configLoading } = useApp()
+  const toast = useToast()
   const [lezioni, setLezioni] = useState([])
   const [assegnazioni, setAssegnazioni] = useState([])
   const [orari, setOrari] = useState([])
@@ -79,15 +87,15 @@ export default function DashboardPage() {
     unsubs.push(onOrari(annoAttivo, setOrari))
     unsubs.push(onVacanze(annoAttivo, setVacanze))
     unsubs.push(
-      onPercorsi((all) => {
-        setPercorsi(all.filter((p) => p.annoScolastico === annoAttivo))
+      onPercorsi(annoAttivo, (all) => {
+        setPercorsi(all)
       })
     )
 
     return () => unsubs.forEach((u) => u())
   }, [annoAttivo, weekOffset])
 
-  // Load unità for percorsi referenced in lessons
+  // Load unita for percorsi referenced in lessons
   useEffect(() => {
     const percorsoIds = [...new Set(lezioni.filter((l) => l.percorsoId).map((l) => l.percorsoId))]
     if (percorsoIds.length === 0) return
@@ -112,7 +120,12 @@ export default function DashboardPage() {
 
   // Status change handler
   async function handleStatoChange(lezioneId, nuovoStato) {
-    await updateLezione(lezioneId, { stato: nuovoStato })
+    try {
+      await updateLezione(lezioneId, { stato: nuovoStato })
+    } catch (err) {
+      console.error('Errore aggiornamento stato lezione:', err)
+      toast.error('Errore nell\'aggiornamento dello stato della lezione')
+    }
   }
 
   if (configLoading || loading) return <LoadingSpinner />
@@ -135,7 +148,7 @@ export default function DashboardPage() {
     days.push({
       index: i,
       date: addDays(start, i),
-      label: GIORNI[i],
+      label: GIORNI_LABEL[i],
       short: GIORNI_SHORT[i],
       isFree: i === giornoLibero,
     })
@@ -223,7 +236,7 @@ export default function DashboardPage() {
   for (let i = 0; i < 6; i++) {
     const day = addDays(start, i)
     const dayStr = format(day, 'yyyy-MM-dd')
-    lezioniPerGiorno[dayStr] = { date: day, label: GIORNI[i], lezioni: [] }
+    lezioniPerGiorno[dayStr] = { date: day, label: GIORNI_LABEL[i], lezioni: [] }
   }
   for (const lez of lezioni) {
     const data = lez.data instanceof Date
@@ -251,7 +264,7 @@ export default function DashboardPage() {
             {lez.classe}
           </span>
           <div className="flex gap-0.5">
-            {['pianificata', 'svolta', 'saltata'].map((s) => (
+            {STATI_LEZIONE.map((s) => (
               <button
                 key={s}
                 onClick={(e) => { e.stopPropagation(); handleStatoChange(lez.id, s) }}
@@ -260,9 +273,9 @@ export default function DashboardPage() {
                     ? STATO_BADGE[s]
                     : 'bg-gray-100 text-gray-300 hover:bg-gray-200 hover:text-gray-500'
                 }`}
-                title={s.charAt(0).toUpperCase() + s.slice(1)}
+                title={STATO_LEZIONE_LABEL[s]}
               >
-                {s === 'pianificata' ? 'P' : s === 'svolta' ? 'S' : 'X'}
+                {STATO_LEZIONE_SHORT[s]}
               </button>
             ))}
           </div>
@@ -273,7 +286,7 @@ export default function DashboardPage() {
           {lez.titoloOverride || lez.materia}
         </span>
 
-        {/* Row 3: Percorso + Unità (if linked) */}
+        {/* Row 3: Percorso + Unita (if linked) */}
         {percorso && (
           <div className="mt-auto pt-0.5">
             <div className="text-[10px] leading-tight text-purple-700 font-semibold truncate">
@@ -394,20 +407,20 @@ export default function DashboardPage() {
           {/* Legend */}
           <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 flex flex-wrap items-center gap-4 text-[11px] text-gray-500">
             <span className="flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-blue-100 border border-blue-200" /> P = Pianificata
+              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-blue-100 border border-blue-200" /> {STATO_LEZIONE_SHORT[STATO_LEZIONE.PIANIFICATA]} = {STATO_LEZIONE_LABEL[STATO_LEZIONE.PIANIFICATA]}
             </span>
             <span className="flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-green-100 border border-green-200" /> S = Svolta
+              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-green-100 border border-green-200" /> {STATO_LEZIONE_SHORT[STATO_LEZIONE.SVOLTA]} = {STATO_LEZIONE_LABEL[STATO_LEZIONE.SVOLTA]}
             </span>
             <span className="flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-100 border border-red-200" /> X = Saltata
+              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-100 border border-red-200" /> {STATO_LEZIONE_SHORT[STATO_LEZIONE.SALTATA]} = {STATO_LEZIONE_LABEL[STATO_LEZIONE.SALTATA]}
             </span>
             <span className="flex items-center gap-1">
               <span className="inline-block w-1 h-2.5 rounded-sm bg-purple-400" /> = Percorso collegato
             </span>
             {giornoLibero !== null && (
               <span className="ml-auto text-gray-400 italic">
-                {GIORNI[giornoLibero]}: giorno libero
+                {GIORNI_LABEL[giornoLibero]}: giorno libero
               </span>
             )}
           </div>
@@ -440,8 +453,8 @@ export default function DashboardPage() {
                       <div
                         key={lez.id}
                         className={`p-3 rounded-lg border ${
-                          lez.stato === 'pianificata' ? 'bg-blue-50 border-blue-200' :
-                          lez.stato === 'svolta' ? 'bg-green-50 border-green-200' :
+                          lez.stato === STATO_LEZIONE.PIANIFICATA ? 'bg-blue-50 border-blue-200' :
+                          lez.stato === STATO_LEZIONE.SVOLTA ? 'bg-green-50 border-green-200' :
                           'bg-red-50 border-red-200'
                         }`}
                       >
@@ -464,7 +477,7 @@ export default function DashboardPage() {
                             )}
                           </div>
                           <div className="flex items-center gap-1">
-                            {['pianificata', 'svolta', 'saltata'].map((s) => (
+                            {STATI_LEZIONE.map((s) => (
                               <button
                                 key={s}
                                 onClick={() => handleStatoChange(lez.id, s)}
@@ -474,7 +487,7 @@ export default function DashboardPage() {
                                     : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                                 }`}
                               >
-                                {s === 'pianificata' ? 'P' : s === 'svolta' ? 'S' : 'X'}
+                                {STATO_LEZIONE_SHORT[s]}
                               </button>
                             ))}
                           </div>

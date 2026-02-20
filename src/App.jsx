@@ -1,15 +1,19 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AppProvider } from './contexts/AppContext'
+import { ToastProvider } from './contexts/ToastContext'
 import AppLayout from './components/layout/AppLayout'
-import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
-import CalendarioPage from './pages/CalendarioPage'
-import PercorsiPage from './pages/PercorsiPage'
-import ProgrammazionePage from './pages/ProgrammazionePage'
-import ArchivioPage from './pages/ArchivioPage'
-import ImpostazioniPage from './pages/ImpostazioniPage'
 import LoadingSpinner from './components/common/LoadingSpinner'
+
+// Lazy-loaded pages
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const CalendarioPage = lazy(() => import('./pages/CalendarioPage'))
+const PercorsiPage = lazy(() => import('./pages/PercorsiPage'))
+const ProgrammazionePage = lazy(() => import('./pages/ProgrammazionePage'))
+const ArchivioPage = lazy(() => import('./pages/ArchivioPage'))
+const ImpostazioniPage = lazy(() => import('./pages/ImpostazioniPage'))
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -27,33 +31,35 @@ function PublicRoute({ children }) {
 
 function AppRoutes() {
   return (
-    <Routes>
-      <Route
-        path="/login"
-        element={
-          <PublicRoute>
-            <LoginPage />
-          </PublicRoute>
-        }
-      />
-      <Route
-        element={
-          <ProtectedRoute>
-            <AppProvider>
-              <AppLayout />
-            </AppProvider>
-          </ProtectedRoute>
-        }
-      >
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/calendario" element={<CalendarioPage />} />
-        <Route path="/percorsi" element={<PercorsiPage />} />
-        <Route path="/programmazione" element={<ProgrammazionePage />} />
-        <Route path="/archivio" element={<ArchivioPage />} />
-        <Route path="/impostazioni" element={<ImpostazioniPage />} />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <Suspense fallback={<LoadingSpinner />}>
+      <Routes>
+        <Route
+          path="/login"
+          element={
+            <PublicRoute>
+              <LoginPage />
+            </PublicRoute>
+          }
+        />
+        <Route
+          element={
+            <ProtectedRoute>
+              <AppProvider>
+                <AppLayout />
+              </AppProvider>
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/calendario" element={<CalendarioPage />} />
+          <Route path="/percorsi" element={<PercorsiPage />} />
+          <Route path="/programmazione" element={<ProgrammazionePage />} />
+          <Route path="/archivio" element={<ArchivioPage />} />
+          <Route path="/impostazioni" element={<ImpostazioniPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   )
 }
 
@@ -61,7 +67,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <ToastProvider>
+          <AppRoutes />
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   )

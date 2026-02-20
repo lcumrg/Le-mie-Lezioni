@@ -1,16 +1,11 @@
 import { useEffect, useState } from 'react'
 import { onUnita, onLezioniByPercorso } from '../../lib/firestore'
+import { STATO_UNITA, STATO_UNITA_LABEL, STATO_LEZIONE } from '../../lib/costanti'
 
 const STATO_DOT = {
-  da_fare: 'bg-gray-300',
-  in_corso: 'bg-yellow-400',
-  completata: 'bg-green-500',
-}
-
-const STATO_LABEL = {
-  da_fare: 'Da fare',
-  in_corso: 'In corso',
-  completata: 'Completata',
+  [STATO_UNITA.DA_FARE]: 'bg-gray-300',
+  [STATO_UNITA.IN_CORSO]: 'bg-yellow-400',
+  [STATO_UNITA.COMPLETATA]: 'bg-green-500',
 }
 
 /**
@@ -99,10 +94,10 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
 
           // Progress summary
           const totaleUnita = units.length
-          const completate = units.filter((u) => u.stato === 'completata').length
+          const completate = units.filter((u) => u.stato === STATO_UNITA.COMPLETATA).length
           const orePianificate = units.reduce((s, u) => s + (u.orePreviste || 0), 0)
           const oreReali = pLezioni
-            .filter((l) => l.stato === 'svolta')
+            .filter((l) => l.stato === STATO_LEZIONE.SVOLTA)
             .reduce((s, l) => s + (l.ore || 0), 0)
 
           return (
@@ -162,7 +157,7 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
                         const isSelected = percorsoId === p.id && unitaId === u.id
                         // Hours for this specific unit
                         const unitLezioni = pLezioni.filter(
-                          (l) => l.unitaId === u.id && l.stato === 'svolta'
+                          (l) => l.unitaId === u.id && l.stato === STATO_LEZIONE.SVOLTA
                         )
                         const unitOreReali = unitLezioni.reduce(
                           (s, l) => s + (l.ore || 0),
@@ -182,8 +177,8 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
                           >
                             {/* Status dot */}
                             <span
-                              className={`w-2 h-2 rounded-full shrink-0 ${STATO_DOT[u.stato] || STATO_DOT.da_fare}`}
-                              title={STATO_LABEL[u.stato]}
+                              className={`w-2 h-2 rounded-full shrink-0 ${STATO_DOT[u.stato] || STATO_DOT[STATO_UNITA.DA_FARE]}`}
+                              title={STATO_UNITA_LABEL[u.stato]}
                             />
 
                             {/* Order number */}
@@ -196,7 +191,7 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
                               className={`text-xs flex-1 truncate ${
                                 isSelected
                                   ? 'font-semibold text-blue-800'
-                                  : u.stato === 'completata'
+                                  : u.stato === STATO_UNITA.COMPLETATA
                                     ? 'text-gray-400 line-through'
                                     : 'text-gray-700'
                               }`}

@@ -8,32 +8,47 @@ import {
   deleteUnita,
   onLezioniByPercorso,
 } from '../../lib/firestore'
-
-const STATO_LABEL = {
-  da_fare: 'Da fare',
-  in_corso: 'In corso',
-  completata: 'Completata',
-}
+import {
+  STATO_UNITA,
+  STATO_UNITA_LABEL,
+  STATO_UNITA_NEXT,
+  STATO_LEZIONE,
+  STATO_LEZIONE_LABEL,
+} from '../../lib/costanti'
+import { useToast } from '../../contexts/ToastContext'
+import ConfirmDialog from '../common/ConfirmDialog'
 
 const STATO_COLORS = {
-  da_fare: 'bg-gray-100 text-gray-600',
-  in_corso: 'bg-yellow-100 text-yellow-700',
-  completata: 'bg-green-100 text-green-700',
+  [STATO_UNITA.DA_FARE]: 'bg-gray-100 text-gray-600',
+  [STATO_UNITA.IN_CORSO]: 'bg-yellow-100 text-yellow-700',
+  [STATO_UNITA.COMPLETATA]: 'bg-green-100 text-green-700',
+}
+
+const STATO_LEZ_COLORS = {
+  [STATO_LEZIONE.PIANIFICATA]: 'bg-blue-100 text-blue-700',
+  [STATO_LEZIONE.SVOLTA]: 'bg-green-100 text-green-700',
+  [STATO_LEZIONE.SALTATA]: 'bg-red-100 text-red-700',
 }
 
 export default function UnitaPanel({ percorso }) {
+  const toast = useToast()
+
   const [unita, setUnita] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
 
+  // Confirm dialog state
+  const [confirmDelete, setConfirmDelete] = useState(null) // unitaId
+  const [confirmRemoveMat, setConfirmRemoveMat] = useState(null) // { unitaId, matIndex }
+
   // Form state
   const [form, setForm] = useState({
     titolo: '',
     descrizione: '',
     orePreviste: 1,
-    stato: 'da_fare',
+    stato: STATO_UNITA.DA_FARE,
   })
 
   // Material form
@@ -52,7 +67,7 @@ export default function UnitaPanel({ percorso }) {
   }, [percorso.id])
 
   function resetForm() {
-    setForm({ titolo: '', descrizione: '', orePreviste: 1, stato: 'da_fare' })
+    setForm({ titolo: '', descrizione: '', orePreviste: 1, stato: STATO_UNITA.DA_FARE })
     setShowForm(false)
     setEditingId(null)
   }
@@ -61,25 +76,29 @@ export default function UnitaPanel({ percorso }) {
     e.preventDefault()
     if (!form.titolo.trim()) return
 
-    if (editingId) {
-      await updateUnita(percorso.id, editingId, {
-        titolo: form.titolo.trim(),
-        descrizione: form.descrizione.trim(),
-        orePreviste: Number(form.orePreviste),
-        stato: form.stato,
-      })
-    } else {
-      const maxOrdine = unita.length > 0 ? Math.max(...unita.map((u) => u.ordine || 0)) : 0
-      await addUnita(percorso.id, {
-        titolo: form.titolo.trim(),
-        descrizione: form.descrizione.trim(),
-        ordine: maxOrdine + 1,
-        orePreviste: Number(form.orePreviste),
-        stato: 'da_fare',
-        materiali: [],
-      })
+    try {
+      if (editingId) {
+        await updateUnita(percorso.id, editingId, {
+          titolo: form.titolo.trim(),
+          descrizione: form.descrizione.trim(),
+          orePreviste: Number(form.orePreviste),
+          stato: form.stato,
+        })
+      } else {
+        const maxOrdine = unita.length > 0 ? Math.max(...unita.map((u) => u.ordine || 0)) : 0
+        await addUnita(percorso.id, {
+          titolo: form.titolo.trim(),
+          descrizione: form.descrizione.trim(),
+          ordine: maxOrdine + 1,
+          orePreviste: Number(form.orePreviste),
+          stato: STATO_UNITA.DA_FARE,
+          materiali: [],
+        })
+      }
+      resetForm()
+    } catch (err) {
+      toast.error('Errore durante il salvataggio dell\'unita.')
     }
-    resetForm()
   }
 
   function startEdit(u) {
@@ -87,19 +106,27 @@ export default function UnitaPanel({ percorso }) {
       titolo: u.titolo,
       descrizione: u.descrizione || '',
       orePreviste: u.orePreviste || 1,
-      stato: u.stato || 'da_fare',
+      stato: u.stato || STATO_UNITA.DA_FARE,
     })
     setEditingId(u.id)
     setShowForm(true)
   }
 
   async function handleDelete(unitaId) {
-    await deleteUnita(percorso.id, unitaId)
-    if (editingId === unitaId) resetForm()
+    try {
+      await deleteUnita(percorso.id, unitaId)
+      if (editingId === unitaId) resetForm()
+    } catch (err) {
+      toast.error('Errore durante l\'eliminazione dell\'unita.')
+    }
   }
 
   async function handleStatoChange(unitaId, nuovoStato) {
-    await updateUnita(percorso.id, unitaId, { stato: nuovoStato })
+    try {
+      await updateUnita(percorso.id, unitaId, { stato: nuovoStato })
+    } catch (err) {
+      toast.error('Errore durante l\'aggiornamento dello stato.')
+    }
   }
 
   async function handleMove(unitaId, direction) {
@@ -111,10 +138,14 @@ export default function UnitaPanel({ percorso }) {
     const currentOrdine = unita[idx].ordine
     const swapOrdine = unita[swapIdx].ordine
 
-    await Promise.all([
-      updateUnita(percorso.id, unita[idx].id, { ordine: swapOrdine }),
-      updateUnita(percorso.id, unita[swapIdx].id, { ordine: currentOrdine }),
-    ])
+    try {
+      await Promise.all([
+        updateUnita(percorso.id, unita[idx].id, { ordine: swapOrdine }),
+        updateUnita(percorso.id, unita[swapIdx].id, { ordine: currentOrdine }),
+      ])
+    } catch (err) {
+      toast.error('Errore durante lo spostamento dell\'unita.')
+    }
   }
 
   // Materials management
@@ -131,15 +162,23 @@ export default function UnitaPanel({ percorso }) {
     if (matForm.tipo === 'nota' && !matForm.testo.trim()) return
 
     const materiali = [...(u.materiali || []), newMat]
-    await updateUnita(percorso.id, unitaId, { materiali })
-    setMatForm({ tipo: 'link', titolo: '', url: '', testo: '' })
+    try {
+      await updateUnita(percorso.id, unitaId, { materiali })
+      setMatForm({ tipo: 'link', titolo: '', url: '', testo: '' })
+    } catch (err) {
+      toast.error('Errore durante l\'aggiunta del materiale.')
+    }
   }
 
   async function handleRemoveMaterial(unitaId, matIndex) {
     const u = unita.find((x) => x.id === unitaId)
     if (!u) return
     const materiali = (u.materiali || []).filter((_, i) => i !== matIndex)
-    await updateUnita(percorso.id, unitaId, { materiali })
+    try {
+      await updateUnita(percorso.id, unitaId, { materiali })
+    } catch (err) {
+      toast.error('Errore durante la rimozione del materiale.')
+    }
   }
 
   // Helper: get linked lessons for a specific unit
@@ -155,14 +194,14 @@ export default function UnitaPanel({ percorso }) {
 
   // Progress
   const totale = unita.length
-  const completate = unita.filter((u) => u.stato === 'completata').length
+  const completate = unita.filter((u) => u.stato === STATO_UNITA.COMPLETATA).length
   const pct = totale > 0 ? Math.round((completate / totale) * 100) : 0
   const oreTotali = unita.reduce((s, u) => s + (u.orePreviste || 0), 0)
   const oreCompletate = unita
-    .filter((u) => u.stato === 'completata')
+    .filter((u) => u.stato === STATO_UNITA.COMPLETATA)
     .reduce((s, u) => s + (u.orePreviste || 0), 0)
   const oreReali = lezioniCollegate
-    .filter((l) => l.stato === 'svolta')
+    .filter((l) => l.stato === STATO_LEZIONE.SVOLTA)
     .reduce((s, l) => s + (l.ore || 0), 0)
 
   if (loading) {
@@ -171,6 +210,34 @@ export default function UnitaPanel({ percorso }) {
 
   return (
     <div className="space-y-4">
+      {/* Confirm dialog: delete unita */}
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Elimina unita"
+        message="Sei sicuro di voler eliminare questa unita? L'operazione non e reversibile."
+        confirmText="Elimina"
+        danger
+        onConfirm={() => {
+          handleDelete(confirmDelete)
+          setConfirmDelete(null)
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
+
+      {/* Confirm dialog: remove material */}
+      <ConfirmDialog
+        open={confirmRemoveMat !== null}
+        title="Rimuovi materiale"
+        message="Sei sicuro di voler rimuovere questo materiale?"
+        confirmText="Rimuovi"
+        danger
+        onConfirm={() => {
+          handleRemoveMaterial(confirmRemoveMat.unitaId, confirmRemoveMat.matIndex)
+          setConfirmRemoveMat(null)
+        }}
+        onCancel={() => setConfirmRemoveMat(null)}
+      />
+
       {/* Progress bar */}
       {totale > 0 && (
         <div className="flex items-center gap-3">
@@ -202,18 +269,13 @@ export default function UnitaPanel({ percorso }) {
               {/* Status button */}
               <button
                 onClick={() => {
-                  const next =
-                    u.stato === 'da_fare'
-                      ? 'in_corso'
-                      : u.stato === 'in_corso'
-                        ? 'completata'
-                        : 'da_fare'
+                  const next = STATO_UNITA_NEXT[u.stato] || STATO_UNITA.DA_FARE
                   handleStatoChange(u.id, next)
                 }}
-                className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${STATO_COLORS[u.stato] || STATO_COLORS.da_fare}`}
+                className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${STATO_COLORS[u.stato] || STATO_COLORS[STATO_UNITA.DA_FARE]}`}
                 title="Clicca per cambiare stato"
               >
-                {STATO_LABEL[u.stato] || 'Da fare'}
+                {STATO_UNITA_LABEL[u.stato] || STATO_UNITA_LABEL[STATO_UNITA.DA_FARE]}
               </button>
 
               {/* Title & description */}
@@ -221,7 +283,7 @@ export default function UnitaPanel({ percorso }) {
                 className="flex-1 min-w-0 cursor-pointer"
                 onClick={() => setExpandedId(expandedId === u.id ? null : u.id)}
               >
-                <span className={`text-sm font-medium ${u.stato === 'completata' ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                <span className={`text-sm font-medium ${u.stato === STATO_UNITA.COMPLETATA ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                   {u.titolo}
                 </span>
                 {u.descrizione && (
@@ -232,7 +294,7 @@ export default function UnitaPanel({ percorso }) {
               {/* Hours: real / planned */}
               {(() => {
                 const uLez = lezioniPerUnita(u.id)
-                const uOreReali = uLez.filter((l) => l.stato === 'svolta').reduce((s, l) => s + (l.ore || 0), 0)
+                const uOreReali = uLez.filter((l) => l.stato === STATO_LEZIONE.SVOLTA).reduce((s, l) => s + (l.ore || 0), 0)
                 return (
                   <span className="text-xs text-gray-400 shrink-0">
                     {uOreReali > 0 && <span className="text-green-600">{uOreReali}/</span>}
@@ -285,7 +347,7 @@ export default function UnitaPanel({ percorso }) {
                 </svg>
               </button>
               <button
-                onClick={() => handleDelete(u.id)}
+                onClick={() => setConfirmDelete(u.id)}
                 className="text-red-300 hover:text-red-500"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -301,12 +363,6 @@ export default function UnitaPanel({ percorso }) {
                 {(() => {
                   const uLez = lezioniPerUnita(u.id)
                   if (uLez.length === 0) return null
-
-                  const STATO_LEZ = {
-                    pianificata: 'bg-blue-100 text-blue-700',
-                    svolta: 'bg-green-100 text-green-700',
-                    saltata: 'bg-red-100 text-red-700',
-                  }
 
                   return (
                     <div>
@@ -324,8 +380,8 @@ export default function UnitaPanel({ percorso }) {
                               <span className="text-gray-400 w-16 shrink-0">
                                 {l.oraInizio}–{l.oraFine}
                               </span>
-                              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${STATO_LEZ[l.stato] || ''}`}>
-                                {l.stato === 'svolta' ? 'Svolta' : l.stato === 'saltata' ? 'Saltata' : 'Pianificata'}
+                              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${STATO_LEZ_COLORS[l.stato] || ''}`}>
+                                {STATO_LEZIONE_LABEL[l.stato] || STATO_LEZIONE_LABEL[STATO_LEZIONE.PIANIFICATA]}
                               </span>
                               <span className="text-gray-400">{l.ore || 0}h</span>
                               {l.note && (
@@ -367,7 +423,7 @@ export default function UnitaPanel({ percorso }) {
                           </>
                         )}
                         <button
-                          onClick={() => handleRemoveMaterial(u.id, mi)}
+                          onClick={() => setConfirmRemoveMat({ unitaId: u.id, matIndex: mi })}
                           className="text-red-300 hover:text-red-500 shrink-0"
                         >
                           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -473,9 +529,9 @@ export default function UnitaPanel({ percorso }) {
                   onChange={(e) => setForm((f) => ({ ...f, stato: e.target.value }))}
                   className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
-                  <option value="da_fare">Da fare</option>
-                  <option value="in_corso">In corso</option>
-                  <option value="completata">Completata</option>
+                  <option value={STATO_UNITA.DA_FARE}>{STATO_UNITA_LABEL[STATO_UNITA.DA_FARE]}</option>
+                  <option value={STATO_UNITA.IN_CORSO}>{STATO_UNITA_LABEL[STATO_UNITA.IN_CORSO]}</option>
+                  <option value={STATO_UNITA.COMPLETATA}>{STATO_UNITA_LABEL[STATO_UNITA.COMPLETATA]}</option>
                 </select>
               </div>
             )}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../contexts/AppContext'
+import { useToast } from '../contexts/ToastContext'
 import {
   setAnnoScolasticoConfig,
   onAssegnazioni,
@@ -12,11 +13,15 @@ import {
   addVacanza,
   deleteVacanza,
 } from '../lib/firestore'
+import {
+  GIORNI_LABEL,
+  GIORNI_SHORT,
+  ORE_ROMAN,
+  TIPO_VACANZA,
+  TIPO_VACANZA_LABEL,
+} from '../lib/costanti'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-
-const GIORNI_LABEL = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
-const GIORNI_SHORT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
-const ORE_ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII']
+import ConfirmDialog from '../components/common/ConfirmDialog'
 
 function generateDefaultOre(count, startTime = '08:00') {
   const ore = []
@@ -30,8 +35,11 @@ function generateDefaultOre(count, startTime = '08:00') {
   return ore
 }
 
+const ANNO_PATTERN = /^\d{4}-\d{4}$/
+
 export default function ImpostazioniPage() {
   const { annoAttivo, annoConfig, config, loading: configLoading } = useApp()
+  const toast = useToast()
 
   // --- Anno scolastico setup ---
   const [annoInput, setAnnoInput] = useState('')
@@ -54,7 +62,7 @@ export default function ImpostazioniPage() {
     nome: '',
     dataInizio: '',
     dataFine: '',
-    tipo: 'vacanza',
+    tipo: TIPO_VACANZA.VACANZA,
   })
 
   // --- Orari ---
@@ -64,6 +72,14 @@ export default function ImpostazioniPage() {
     numeroOra: 1,
     classe: '',
     materia: '',
+  })
+
+  // --- Confirm dialog state (shared for all delete operations) ---
+  const [deleteConfirm, setDeleteConfirm] = useState({
+    open: false,
+    id: null,
+    type: '',
+    label: '',
   })
 
   // Load assegnazioni, orari, vacanze when annoAttivo changes
@@ -101,16 +117,29 @@ export default function ImpostazioniPage() {
 
   async function handleSaveAnno(e) {
     e.preventDefault()
-    if (!annoInput.trim()) return
+    const value = annoInput.trim()
+    if (!value) return
+
+    if (!ANNO_PATTERN.test(value)) {
+      toast.error('Formato anno non valido. Usa il formato: 2025-2026')
+      return
+    }
+
     setSaving(true)
-    await setAnnoScolasticoConfig({
-      annoAttivo: annoInput.trim(),
-      anniScolastici: {
-        ...(config?.anniScolastici || {}),
-        [annoInput.trim()]: config?.anniScolastici?.[annoInput.trim()] || {},
-      },
-    })
-    setSaving(false)
+    try {
+      await setAnnoScolasticoConfig({
+        annoAttivo: value,
+        anniScolastici: {
+          ...(config?.anniScolastici || {}),
+          [value]: config?.anniScolastici?.[value] || {},
+        },
+      })
+      toast.success('Anno scolastico salvato')
+    } catch (err) {
+      toast.error('Errore nel salvataggio dell\'anno scolastico')
+    } finally {
+      setSaving(false)
+    }
   }
 
   // ── Assegnazioni handlers ──
@@ -118,19 +147,30 @@ export default function ImpostazioniPage() {
   async function handleAddAssegnazione(e) {
     e.preventDefault()
     if (!nuovaClasse.trim() || !nuovaMateria.trim() || !annoAttivo) return
-    await addAssegnazione({
-      annoScolastico: annoAttivo,
-      classe: nuovaClasse.trim().toUpperCase(),
-      materia: nuovaMateria.trim(),
-      attiva: true,
-      archiviata: false,
-    })
-    setNuovaClasse('')
-    setNuovaMateria('')
+    try {
+      await addAssegnazione({
+        annoScolastico: annoAttivo,
+        classe: nuovaClasse.trim().toUpperCase(),
+        materia: nuovaMateria.trim(),
+        attiva: true,
+        archiviata: false,
+      })
+      setNuovaClasse('')
+      setNuovaMateria('')
+      toast.success('Assegnazione aggiunta')
+    } catch (err) {
+      toast.error('Errore nell\'aggiunta dell\'assegnazione')
+    }
   }
 
-  async function handleDeleteAssegnazione(id) {
-    await deleteAssegnazione(id)
+  function handleDeleteAssegnazione(id) {
+    const a = assegnazioni.find((x) => x.id === id)
+    setDeleteConfirm({
+      open: true,
+      id,
+      type: 'assegnazione',
+      label: a ? `${a.classe} — ${a.materia}` : 'questa assegnazione',
+    })
   }
 
   // ── Ore scolastiche handlers ──
@@ -163,18 +203,24 @@ export default function ImpostazioniPage() {
   async function handleSaveOreConfig() {
     if (!annoAttivo) return
     setSavingOre(true)
-    await setAnnoScolasticoConfig({
-      anniScolastici: {
-        ...(config?.anniScolastici || {}),
-        [annoAttivo]: {
-          ...(config?.anniScolastici?.[annoAttivo] || {}),
-          oreLezione,
-          giornoLibero,
-          dataFineScuola: dataFineScuola || null,
+    try {
+      await setAnnoScolasticoConfig({
+        anniScolastici: {
+          ...(config?.anniScolastici || {}),
+          [annoAttivo]: {
+            ...(config?.anniScolastici?.[annoAttivo] || {}),
+            oreLezione,
+            giornoLibero,
+            dataFineScuola: dataFineScuola || null,
+          },
         },
-      },
-    })
-    setSavingOre(false)
+      })
+      toast.success('Configurazione ore salvata')
+    } catch (err) {
+      toast.error('Errore nel salvataggio della configurazione ore')
+    } finally {
+      setSavingOre(false)
+    }
   }
 
   // ── Vacanze handlers ──
@@ -182,18 +228,36 @@ export default function ImpostazioniPage() {
   async function handleAddVacanza(e) {
     e.preventDefault()
     if (!vacanzaForm.nome.trim() || !vacanzaForm.dataInizio || !annoAttivo) return
-    await addVacanza({
-      annoScolastico: annoAttivo,
-      nome: vacanzaForm.nome.trim(),
-      dataInizio: vacanzaForm.dataInizio,
-      dataFine: vacanzaForm.dataFine || vacanzaForm.dataInizio,
-      tipo: vacanzaForm.tipo,
-    })
-    setVacanzaForm({ nome: '', dataInizio: '', dataFine: '', tipo: 'vacanza' })
+
+    const dataFine = vacanzaForm.dataFine || vacanzaForm.dataInizio
+    if (dataFine < vacanzaForm.dataInizio) {
+      toast.error('La data di fine non può essere precedente alla data di inizio')
+      return
+    }
+
+    try {
+      await addVacanza({
+        annoScolastico: annoAttivo,
+        nome: vacanzaForm.nome.trim(),
+        dataInizio: vacanzaForm.dataInizio,
+        dataFine,
+        tipo: vacanzaForm.tipo,
+      })
+      setVacanzaForm({ nome: '', dataInizio: '', dataFine: '', tipo: TIPO_VACANZA.VACANZA })
+      toast.success('Vacanza aggiunta')
+    } catch (err) {
+      toast.error('Errore nell\'aggiunta della vacanza')
+    }
   }
 
-  async function handleDeleteVacanza(id) {
-    await deleteVacanza(id)
+  function handleDeleteVacanza(id) {
+    const v = vacanze.find((x) => x.id === id)
+    setDeleteConfirm({
+      open: true,
+      id,
+      type: 'vacanza',
+      label: v ? v.nome : 'questa vacanza',
+    })
   }
 
   // ── Orario settimanale handlers ──
@@ -206,21 +270,57 @@ export default function ImpostazioniPage() {
     const oraConfig = oreLezione.find((o) => o.numero === orarioForm.numeroOra)
     if (!oraConfig) return
 
-    await addOrario({
-      annoScolastico: annoAttivo,
-      giorno: orarioForm.giorno,
-      numeroOra: orarioForm.numeroOra,
-      oraInizio: oraConfig.inizio,
-      oraFine: oraConfig.fine,
-      classe: orarioForm.classe,
-      materia: orarioForm.materia,
-      ore: 1,
-    })
-    setOrarioForm((f) => ({ ...f, classe: '', materia: '' }))
+    try {
+      await addOrario({
+        annoScolastico: annoAttivo,
+        giorno: orarioForm.giorno,
+        numeroOra: orarioForm.numeroOra,
+        oraInizio: oraConfig.inizio,
+        oraFine: oraConfig.fine,
+        classe: orarioForm.classe,
+        materia: orarioForm.materia,
+        ore: 1,
+      })
+      setOrarioForm((f) => ({ ...f, classe: '', materia: '' }))
+      toast.success('Orario aggiunto')
+    } catch (err) {
+      toast.error('Errore nell\'aggiunta dell\'orario')
+    }
   }
 
-  async function handleDeleteOrario(id) {
-    await deleteOrario(id)
+  function handleDeleteOrario(id) {
+    const o = orari.find((x) => x.id === id)
+    setDeleteConfirm({
+      open: true,
+      id,
+      type: 'orario',
+      label: o
+        ? `${GIORNI_SHORT[o.giorno]} ${o.numeroOra ? ORE_ROMAN[o.numeroOra - 1] + 'a ora' : o.oraInizio} — ${o.classe}`
+        : 'questo slot orario',
+    })
+  }
+
+  // ── Confirm dialog handler ──
+
+  async function handleConfirmDelete() {
+    const { id, type } = deleteConfirm
+    setDeleteConfirm({ open: false, id: null, type: '', label: '' })
+
+    try {
+      if (type === 'assegnazione') {
+        await deleteAssegnazione(id)
+      } else if (type === 'vacanza') {
+        await deleteVacanza(id)
+      } else if (type === 'orario') {
+        await deleteOrario(id)
+      }
+    } catch (err) {
+      toast.error('Errore durante l\'eliminazione')
+    }
+  }
+
+  function handleCancelDelete() {
+    setDeleteConfirm({ open: false, id: null, type: '', label: '' })
   }
 
   // Auto-fill materia when classe is selected in orario form
@@ -520,9 +620,11 @@ export default function ImpostazioniPage() {
                 onChange={(e) => setVacanzaForm((f) => ({ ...f, tipo: e.target.value }))}
                 className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               >
-                <option value="vacanza">Vacanza</option>
-                <option value="chiusura">Chiusura</option>
-                <option value="assenza">Assenza personale</option>
+                {Object.values(TIPO_VACANZA).map((tipo) => (
+                  <option key={tipo} value={tipo}>
+                    {TIPO_VACANZA_LABEL[tipo]}
+                  </option>
+                ))}
               </select>
             </div>
             <button
@@ -546,14 +648,14 @@ export default function ImpostazioniPage() {
                     <div className="flex items-center gap-2">
                       <span
                         className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                          v.tipo === 'vacanza'
+                          v.tipo === TIPO_VACANZA.VACANZA
                             ? 'bg-orange-100 text-orange-700'
-                            : v.tipo === 'chiusura'
+                            : v.tipo === TIPO_VACANZA.CHIUSURA
                               ? 'bg-purple-100 text-purple-700'
                               : 'bg-yellow-100 text-yellow-700'
                         }`}
                       >
-                        {v.tipo === 'vacanza' ? 'Vacanza' : v.tipo === 'chiusura' ? 'Chiusura' : 'Assenza'}
+                        {TIPO_VACANZA_LABEL[v.tipo] || v.tipo}
                       </span>
                       <span className="text-sm font-medium text-gray-800">{v.nome}</span>
                     </div>
@@ -662,18 +764,24 @@ export default function ImpostazioniPage() {
             </form>
           ) : (
             /* ── Fallback: form manuale (senza config ore) ── */
-            <form onSubmit={(e) => {
+            <form onSubmit={async (e) => {
               e.preventDefault()
               if (!orarioForm.classe || !orarioForm.materia || !annoAttivo) return
-              addOrario({
-                annoScolastico: annoAttivo,
-                giorno: orarioForm.giorno,
-                oraInizio: orarioForm.oraInizio || '08:00',
-                oraFine: orarioForm.oraFine || '09:00',
-                classe: orarioForm.classe,
-                materia: orarioForm.materia,
-                ore: 1,
-              }).then(() => setOrarioForm((f) => ({ ...f, classe: '', materia: '' })))
+              try {
+                await addOrario({
+                  annoScolastico: annoAttivo,
+                  giorno: orarioForm.giorno,
+                  oraInizio: orarioForm.oraInizio || '08:00',
+                  oraFine: orarioForm.oraFine || '09:00',
+                  classe: orarioForm.classe,
+                  materia: orarioForm.materia,
+                  ore: 1,
+                })
+                setOrarioForm((f) => ({ ...f, classe: '', materia: '' }))
+                toast.success('Orario aggiunto')
+              } catch (err) {
+                toast.error('Errore nell\'aggiunta dell\'orario')
+              }
             }} className="flex flex-wrap items-end gap-3 mb-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Giorno</label>
@@ -787,6 +895,17 @@ export default function ImpostazioniPage() {
           </div>
         </section>
       )}
+
+      {/* ── Confirm Dialog (shared) ── */}
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        title="Conferma eliminazione"
+        message={`Vuoi eliminare ${deleteConfirm.label}?`}
+        confirmText="Elimina"
+        danger
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
     </div>
   )
 }

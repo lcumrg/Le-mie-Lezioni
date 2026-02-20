@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../contexts/AppContext'
+import { useToast } from '../contexts/ToastContext'
 import {
   onPercorsi,
   addPercorso,
@@ -9,15 +10,18 @@ import {
 } from '../lib/firestore'
 import UnitaPanel from '../components/percorsi/UnitaPanel'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import ConfirmDialog from '../components/common/ConfirmDialog'
 
 export default function PercorsiPage() {
   const { annoAttivo, loading: configLoading } = useApp()
+  const toast = useToast()
   const [percorsi, setPercorsi] = useState([])
   const [assegnazioni, setAssegnazioni] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
 
   // Form
   const [form, setForm] = useState({
@@ -33,8 +37,8 @@ export default function PercorsiPage() {
       return
     }
 
-    const unsub1 = onPercorsi((all) => {
-      setPercorsi(all.filter((p) => p.annoScolastico === annoAttivo))
+    const unsub1 = onPercorsi(annoAttivo, (all) => {
+      setPercorsi(all)
       setLoading(false)
     })
     const unsub2 = onAssegnazioni(annoAttivo, setAssegnazioni)
@@ -56,25 +60,36 @@ export default function PercorsiPage() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!form.titolo.trim() || !form.classe) return
-
-    if (editingId) {
-      await updatePercorso(editingId, {
-        titolo: form.titolo.trim(),
-        classe: form.classe,
-        materia: form.materia.trim(),
-        descrizione: form.descrizione.trim(),
-      })
-    } else {
-      await addPercorso({
-        annoScolastico: annoAttivo,
-        titolo: form.titolo.trim(),
-        classe: form.classe,
-        materia: form.materia.trim(),
-        descrizione: form.descrizione.trim(),
-      })
+    if (!form.titolo.trim()) {
+      toast.error('Inserisci un titolo per il percorso.')
+      return
     }
-    resetForm()
+    if (!form.classe) {
+      toast.error('Seleziona una classe.')
+      return
+    }
+
+    try {
+      if (editingId) {
+        await updatePercorso(editingId, {
+          titolo: form.titolo.trim(),
+          classe: form.classe,
+          materia: form.materia.trim(),
+          descrizione: form.descrizione.trim(),
+        })
+      } else {
+        await addPercorso({
+          annoScolastico: annoAttivo,
+          titolo: form.titolo.trim(),
+          classe: form.classe,
+          materia: form.materia.trim(),
+          descrizione: form.descrizione.trim(),
+        })
+      }
+      resetForm()
+    } catch (err) {
+      toast.error('Errore durante il salvataggio del percorso.')
+    }
   }
 
   function startEdit(p) {
@@ -89,9 +104,14 @@ export default function PercorsiPage() {
   }
 
   async function handleDelete(id) {
-    await deletePercorso(id)
-    if (expandedId === id) setExpandedId(null)
-    if (editingId === id) resetForm()
+    try {
+      await deletePercorso(id)
+      if (expandedId === id) setExpandedId(null)
+      if (editingId === id) resetForm()
+    } catch (err) {
+      toast.error('Errore durante l\'eliminazione del percorso.')
+    }
+    setDeleteConfirm(null)
   }
 
   if (configLoading || loading) return <LoadingSpinner />
@@ -269,7 +289,7 @@ export default function PercorsiPage() {
                       </svg>
                     </button>
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleDelete(p.id) }}
+                      onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: p.id, titolo: p.titolo }) }}
                       className="text-red-300 hover:text-red-500"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -304,6 +324,16 @@ export default function PercorsiPage() {
           </button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteConfirm !== null}
+        title="Elimina percorso"
+        message={deleteConfirm ? `Eliminare "${deleteConfirm.titolo}"? Tutte le unita associate verranno rimosse.` : ''}
+        confirmText="Elimina"
+        danger
+        onConfirm={() => deleteConfirm && handleDelete(deleteConfirm.id)}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </div>
   )
 }

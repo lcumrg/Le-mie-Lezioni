@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useApp } from '../contexts/AppContext'
+import { useToast } from '../contexts/ToastContext'
 import {
   onLezioniSettimana,
   onOrari,
@@ -9,29 +10,35 @@ import {
   updateLezione,
   deleteLezione,
 } from '../lib/firestore'
+import {
+  STATO_LEZIONE,
+  STATO_LEZIONE_SHORT,
+  STATI_LEZIONE,
+  GIORNI_LABEL,
+} from '../lib/costanti'
 import PercorsoSelector from '../components/calendario/PercorsoSelector'
+import ConfirmDialog from '../components/common/ConfirmDialog'
 import { getWeekRange } from '../lib/settimane'
 import { format, addDays, isToday, isBefore, startOfDay } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Timestamp } from 'firebase/firestore'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 
-const GIORNI = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
-
 const STATO_COLORS = {
-  pianificata: 'bg-blue-50 border-blue-200',
-  svolta: 'bg-green-50 border-green-200',
-  saltata: 'bg-red-50 border-red-200',
+  [STATO_LEZIONE.PIANIFICATA]: 'bg-blue-50 border-blue-200',
+  [STATO_LEZIONE.SVOLTA]: 'bg-green-50 border-green-200',
+  [STATO_LEZIONE.SALTATA]: 'bg-red-50 border-red-200',
 }
 
 const STATO_BADGE = {
-  pianificata: 'bg-blue-100 text-blue-700',
-  svolta: 'bg-green-100 text-green-700',
-  saltata: 'bg-red-100 text-red-700',
+  [STATO_LEZIONE.PIANIFICATA]: 'bg-blue-100 text-blue-700',
+  [STATO_LEZIONE.SVOLTA]: 'bg-green-100 text-green-700',
+  [STATO_LEZIONE.SALTATA]: 'bg-red-100 text-red-700',
 }
 
 export default function CalendarioPage() {
   const { annoAttivo, annoConfig, loading: configLoading } = useApp()
+  const toast = useToast()
   const [lezioni, setLezioni] = useState([])
   const [orari, setOrari] = useState([])
   const [assegnazioni, setAssegnazioni] = useState([])
@@ -40,6 +47,7 @@ export default function CalendarioPage() {
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [editingLezione, setEditingLezione] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
 
   const { start, end } = getWeekRange(weekOffset)
 
@@ -56,9 +64,7 @@ export default function CalendarioPage() {
     })
     const unsub2 = onOrari(annoAttivo, setOrari)
     const unsub3 = onAssegnazioni(annoAttivo, setAssegnazioni)
-    const unsub4 = onPercorsi((all) => {
-      setPercorsi(all.filter((p) => p.annoScolastico === annoAttivo))
-    })
+    const unsub4 = onPercorsi(annoAttivo, setPercorsi)
 
     return () => { unsub1(); unsub2(); unsub3(); unsub4() }
   }, [annoAttivo, weekOffset])
@@ -87,7 +93,7 @@ export default function CalendarioPage() {
         .filter((o) => o.giorno === i)
         .sort((a, b) => a.oraInizio.localeCompare(b.oraInizio))
 
-      days.push({ index: i, date, dayStr, label: GIORNI[i], lezioni: dayLezioni, expectedSlots })
+      days.push({ index: i, date, dayStr, label: GIORNI_LABEL[i], lezioni: dayLezioni, expectedSlots })
     }
     return days
   }, [start, lezioni, orari])
@@ -135,7 +141,7 @@ export default function CalendarioPage() {
             classe: slot.classe,
             materia: slot.materia,
             ore: slot.ore,
-            stato: 'pianificata',
+            stato: STATO_LEZIONE.PIANIFICATA,
             note: '',
             titoloOverride: '',
           })
@@ -143,33 +149,56 @@ export default function CalendarioPage() {
       }
     }
 
-    await Promise.all(promises)
+    try {
+      await Promise.all(promises)
+    } catch (err) {
+      toast.error('Errore durante la generazione delle lezioni.')
+    }
     setGenerating(false)
   }
 
   // Update lesson status
   async function handleStatoChange(lezioneId, nuovoStato) {
-    await updateLezione(lezioneId, { stato: nuovoStato })
+    try {
+      await updateLezione(lezioneId, { stato: nuovoStato })
+    } catch (err) {
+      toast.error('Errore durante l\'aggiornamento dello stato.')
+    }
   }
 
   // Save edited lesson
   async function handleSaveEdit() {
     if (!editingLezione) return
     const { id, note, titoloOverride, stato, percorsoId, unitaId } = editingLezione
-    await updateLezione(id, {
-      note,
-      titoloOverride,
-      stato,
-      percorsoId: percorsoId || null,
-      unitaId: unitaId || null,
-    })
-    setEditingLezione(null)
+    try {
+      await updateLezione(id, {
+        note,
+        titoloOverride,
+        stato,
+        percorsoId: percorsoId || null,
+        unitaId: unitaId || null,
+      })
+      setEditingLezione(null)
+    } catch (err) {
+      toast.error('Errore durante il salvataggio della lezione.')
+    }
   }
 
-  // Delete lesson
-  async function handleDeleteLezione(id) {
-    await deleteLezione(id)
-    if (editingLezione?.id === id) setEditingLezione(null)
+  // Delete lesson (with confirmation)
+  function handleDeleteLezione(id) {
+    setConfirmDelete(id)
+  }
+
+  async function confirmDeleteLezione() {
+    if (!confirmDelete) return
+    const id = confirmDelete
+    setConfirmDelete(null)
+    try {
+      await deleteLezione(id)
+      if (editingLezione?.id === id) setEditingLezione(null)
+    } catch (err) {
+      toast.error('Errore durante l\'eliminazione della lezione.')
+    }
   }
 
   if (configLoading || loading) return <LoadingSpinner />
@@ -301,7 +330,7 @@ export default function CalendarioPage() {
 
                       {/* Quick status buttons */}
                       <div className="flex items-center gap-1">
-                        {['pianificata', 'svolta', 'saltata'].map((s) => (
+                        {STATI_LEZIONE.map((s) => (
                           <button
                             key={s}
                             onClick={() => handleStatoChange(lez.id, s)}
@@ -311,7 +340,7 @@ export default function CalendarioPage() {
                                 : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                             }`}
                           >
-                            {s === 'pianificata' ? 'P' : s === 'svolta' ? 'S' : 'X'}
+                            {STATO_LEZIONE_SHORT[s]}
                           </button>
                         ))}
                       </div>
@@ -437,6 +466,17 @@ export default function CalendarioPage() {
           <span className="inline-block w-3 h-3 rounded-full bg-red-200" /> X = Saltata
         </span>
       </div>
+
+      {/* Confirm delete dialog */}
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="Elimina lezione"
+        message="Sei sicuro di voler eliminare questa lezione? L'azione non può essere annullata."
+        confirmText="Elimina"
+        danger
+        onConfirm={confirmDeleteLezione}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   )
 }

@@ -1,5 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useApp } from '../contexts/AppContext'
+import { useToast } from '../contexts/ToastContext'
+import { STATO_UNITA } from '../lib/costanti'
 import {
   onAssegnazioni,
   onOrari,
@@ -26,11 +28,12 @@ import {
 } from 'date-fns'
 import { it } from 'date-fns/locale'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import ConfirmDialog from '../components/common/ConfirmDialog'
 
 const STATO_UNITA_DOT = {
-  da_fare: 'bg-gray-300',
-  in_corso: 'bg-yellow-400',
-  completata: 'bg-green-500',
+  [STATO_UNITA.DA_FARE]: 'bg-gray-300',
+  [STATO_UNITA.IN_CORSO]: 'bg-yellow-400',
+  [STATO_UNITA.COMPLETATA]: 'bg-green-500',
 }
 
 // Color palette for percorsi
@@ -45,6 +48,7 @@ const PERCORSO_COLORS = [
 
 export default function ProgrammazionePage() {
   const { annoAttivo, annoConfig, loading: configLoading } = useApp()
+  const toast = useToast()
 
   const [assegnazioni, setAssegnazioni] = useState([])
   const [orari, setOrari] = useState([])
@@ -65,6 +69,10 @@ export default function ProgrammazionePage() {
   const [newUnitaForm, setNewUnitaForm] = useState({})
   const [showNewUnita, setShowNewUnita] = useState(null) // percorsoId
 
+  // Confirm dialogs
+  const [confirmDeletePercorso, setConfirmDeletePercorso] = useState(null) // percorsoId or null
+  const [confirmDeleteUnita, setConfirmDeleteUnita] = useState(null) // { percorsoId, unitaId } or null
+
   const giornoLibero = annoConfig?.giornoLibero ?? null
   const dataFineScuola = annoConfig?.dataFineScuola || null
 
@@ -80,13 +88,13 @@ export default function ProgrammazionePage() {
       setLoading(false)
     }))
     unsubs.push(onOrari(annoAttivo, setOrari))
-    unsubs.push(onPercorsi((all) => setAllPercorsi(all.filter((p) => p.annoScolastico === annoAttivo))))
+    unsubs.push(onPercorsi(annoAttivo, (all) => setAllPercorsi(all)))
     unsubs.push(onVacanze(annoAttivo, setVacanze))
     unsubs.push(onDistribuzioni(setDistribuzioni))
     return () => unsubs.forEach((u) => u())
   }, [annoAttivo])
 
-  // Load unità for percorsi of selected class
+  // Load unita for percorsi of selected class
   const classePercorsi = allPercorsi.filter((p) => p.classe === selectedClasse)
   useEffect(() => {
     if (classePercorsi.length === 0) return
@@ -105,7 +113,7 @@ export default function ProgrammazionePage() {
     [assegnazioni]
   )
 
-  // All unità for selected class, in order (by percorso, then by ordine)
+  // All unita for selected class, in order (by percorso, then by ordine)
   const allUnita = useMemo(() => {
     const result = []
     for (const p of classePercorsi) {
@@ -217,31 +225,36 @@ export default function ProgrammazionePage() {
     if (!selectedClasse || allUnita.length === 0 || weeks.length === 0) return
     setDistributing(true)
 
-    const newDist = {}
-    let unitaIndex = 0
-    let oreAccumulate = 0
+    try {
+      const newDist = {}
+      let unitaIndex = 0
+      let oreAccumulate = 0
 
-    for (const week of weeks) {
-      if (week.oreDisponibili === 0) continue
-      if (unitaIndex >= allUnita.length) break
+      for (const week of weeks) {
+        if (week.oreDisponibili === 0) continue
+        if (unitaIndex >= allUnita.length) break
 
-      const unita = allUnita[unitaIndex]
-      newDist[week.startStr] = {
-        percorsoId: unita.percorsoId,
-        unitaId: unita.id,
-        percorsoTitolo: unita.percorsoTitolo,
-        unitaTitolo: unita.titolo,
+        const unita = allUnita[unitaIndex]
+        newDist[week.startStr] = {
+          percorsoId: unita.percorsoId,
+          unitaId: unita.id,
+          percorsoTitolo: unita.percorsoTitolo,
+          unitaTitolo: unita.titolo,
+        }
+
+        oreAccumulate += week.oreDisponibili
+        if (oreAccumulate >= (unita.orePreviste || 1)) {
+          unitaIndex++
+          oreAccumulate = 0
+        }
       }
 
-      oreAccumulate += week.oreDisponibili
-      if (oreAccumulate >= (unita.orePreviste || 1)) {
-        unitaIndex++
-        oreAccumulate = 0
-      }
+      await setDistribuzioniClasse(selectedClasse, newDist)
+    } catch (err) {
+      toast.error('Errore durante la distribuzione automatica.')
+    } finally {
+      setDistributing(false)
     }
-
-    await setDistribuzioniClasse(selectedClasse, newDist)
-    setDistributing(false)
   }
 
   // ── Manual week assignment change ──
@@ -262,7 +275,11 @@ export default function ProgrammazionePage() {
       }
     }
 
-    await setDistribuzioniClasse(selectedClasse, newDist)
+    try {
+      await setDistribuzioniClasse(selectedClasse, newDist)
+    } catch (err) {
+      toast.error('Errore durante l\'assegnazione della settimana.')
+    }
   }
 
   // ── Percorso CRUD ──
@@ -270,28 +287,42 @@ export default function ProgrammazionePage() {
     e.preventDefault()
     if (!newPercorsoForm.titolo.trim() || !selectedClasse || !annoAttivo) return
     const match = assegnazioni.find((a) => a.classe === selectedClasse)
-    await addPercorso({
-      annoScolastico: annoAttivo,
-      classe: selectedClasse,
-      materia: match?.materia || '',
-      titolo: newPercorsoForm.titolo.trim(),
-      descrizione: newPercorsoForm.descrizione.trim(),
-    })
-    setNewPercorsoForm({ titolo: '', descrizione: '' })
-    setShowNewPercorso(false)
+    try {
+      await addPercorso({
+        annoScolastico: annoAttivo,
+        classe: selectedClasse,
+        materia: match?.materia || '',
+        titolo: newPercorsoForm.titolo.trim(),
+        descrizione: newPercorsoForm.descrizione.trim(),
+      })
+      setNewPercorsoForm({ titolo: '', descrizione: '' })
+      setShowNewPercorso(false)
+    } catch (err) {
+      toast.error('Errore durante la creazione del percorso.')
+    }
   }
 
   async function handleSavePercorso() {
     if (!editingPercorso) return
-    await updatePercorso(editingPercorso.id, {
-      titolo: editingPercorso.titolo,
-      descrizione: editingPercorso.descrizione,
-    })
-    setEditingPercorso(null)
+    try {
+      await updatePercorso(editingPercorso.id, {
+        titolo: editingPercorso.titolo,
+        descrizione: editingPercorso.descrizione,
+      })
+      setEditingPercorso(null)
+    } catch (err) {
+      toast.error('Errore durante il salvataggio del percorso.')
+    }
   }
 
   async function handleDeletePercorso(id) {
-    await deletePercorso(id)
+    try {
+      await deletePercorso(id)
+    } catch (err) {
+      toast.error('Errore durante l\'eliminazione del percorso.')
+    } finally {
+      setConfirmDeletePercorso(null)
+    }
   }
 
   // ── Unita CRUD ──
@@ -299,20 +330,30 @@ export default function ProgrammazionePage() {
     const form = newUnitaForm[percorsoId]
     if (!form?.titolo?.trim()) return
     const existingUnits = unitaByPercorso[percorsoId] || []
-    await addUnita(percorsoId, {
-      titolo: form.titolo.trim(),
-      orePreviste: Number(form.orePreviste) || 2,
-      ordine: existingUnits.length + 1,
-      stato: 'da_fare',
-      descrizione: '',
-      materiali: [],
-    })
-    setNewUnitaForm((prev) => ({ ...prev, [percorsoId]: { titolo: '', orePreviste: 2 } }))
-    setShowNewUnita(null)
+    try {
+      await addUnita(percorsoId, {
+        titolo: form.titolo.trim(),
+        orePreviste: Number(form.orePreviste) || 2,
+        ordine: existingUnits.length + 1,
+        stato: STATO_UNITA.DA_FARE,
+        descrizione: '',
+        materiali: [],
+      })
+      setNewUnitaForm((prev) => ({ ...prev, [percorsoId]: { titolo: '', orePreviste: 2 } }))
+      setShowNewUnita(null)
+    } catch (err) {
+      toast.error('Errore durante la creazione dell\'unita.')
+    }
   }
 
   async function handleDeleteUnita(percorsoId, unitaId) {
-    await deleteUnita(percorsoId, unitaId)
+    try {
+      await deleteUnita(percorsoId, unitaId)
+    } catch (err) {
+      toast.error('Errore durante l\'eliminazione dell\'unita.')
+    } finally {
+      setConfirmDeleteUnita(null)
+    }
   }
 
   if (configLoading || loading) return <LoadingSpinner />
@@ -343,6 +384,28 @@ export default function ProgrammazionePage() {
 
   return (
     <div className="max-w-6xl mx-auto">
+      {/* Confirm dialog: delete percorso */}
+      <ConfirmDialog
+        open={!!confirmDeletePercorso}
+        title="Elimina percorso"
+        message="Sei sicuro di voler eliminare questo percorso e tutte le sue unita?"
+        confirmText="Elimina"
+        danger
+        onConfirm={() => handleDeletePercorso(confirmDeletePercorso)}
+        onCancel={() => setConfirmDeletePercorso(null)}
+      />
+
+      {/* Confirm dialog: delete unita */}
+      <ConfirmDialog
+        open={!!confirmDeleteUnita}
+        title="Elimina unita"
+        message="Sei sicuro di voler eliminare questa unita?"
+        confirmText="Elimina"
+        danger
+        onConfirm={() => handleDeleteUnita(confirmDeleteUnita?.percorsoId, confirmDeleteUnita?.unitaId)}
+        onCancel={() => setConfirmDeleteUnita(null)}
+      />
+
       {/* Header + class selector */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Programmazione</h1>
@@ -486,7 +549,7 @@ export default function ProgrammazionePage() {
                         </svg>
                       </button>
                       <button
-                        onClick={() => handleDeletePercorso(p.id)}
+                        onClick={() => setConfirmDeletePercorso(p.id)}
                         className="text-red-300 hover:text-red-500 p-0.5"
                       >
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -497,16 +560,16 @@ export default function ProgrammazionePage() {
                   </div>
                 )}
 
-                {/* Unità list */}
+                {/* Unita list */}
                 <div className="bg-white">
                   {units.map((u) => (
                     <div key={u.id} className="flex items-center gap-2 px-3 py-1.5 border-t border-gray-100 text-xs">
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${STATO_UNITA_DOT[u.stato] || STATO_UNITA_DOT.da_fare}`} />
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${STATO_UNITA_DOT[u.stato] || STATO_UNITA_DOT[STATO_UNITA.DA_FARE]}`} />
                       <span className="font-mono text-gray-400 w-4 shrink-0">{u.ordine}</span>
                       <span className="flex-1 text-gray-700 truncate">{u.titolo}</span>
                       <span className="text-gray-400 shrink-0">{u.orePreviste || 0}h</span>
                       <button
-                        onClick={() => handleDeleteUnita(p.id, u.id)}
+                        onClick={() => setConfirmDeleteUnita({ percorsoId: p.id, unitaId: u.id })}
                         className="text-red-300 hover:text-red-500"
                       >
                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -516,7 +579,7 @@ export default function ProgrammazionePage() {
                     </div>
                   ))}
 
-                  {/* Add unità */}
+                  {/* Add unita */}
                   {showNewUnita === p.id ? (
                     <div className="flex items-center gap-2 px-3 py-2 border-t border-gray-100">
                       <input

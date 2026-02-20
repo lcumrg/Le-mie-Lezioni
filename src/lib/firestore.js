@@ -2,7 +2,6 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
   setDoc,
   addDoc,
   updateDoc,
@@ -12,7 +11,6 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp,
-  Timestamp,
 } from 'firebase/firestore'
 import { db } from './firebase'
 
@@ -29,10 +27,6 @@ export const configRef = collection(db, 'config')
 
 export function unitaRef(percorsoId) {
   return collection(db, 'percorsi', percorsoId, 'unita')
-}
-
-export function materialiRef(percorsoId) {
-  return collection(db, 'percorsi', percorsoId, 'materiali')
 }
 
 // ── Config ──
@@ -54,8 +48,9 @@ export async function setAnnoScolasticoConfig(data) {
 
 // ── Percorsi ──
 
-export function onPercorsi(callback) {
-  return onSnapshot(percorsiRef, (snap) => {
+export function onPercorsi(annoScolastico, callback) {
+  const q = query(percorsiRef, where('annoScolastico', '==', annoScolastico))
+  return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
   })
 }
@@ -91,31 +86,6 @@ export async function updateUnita(percorsoId, unitaId, data) {
 
 export async function deleteUnita(percorsoId, unitaId) {
   return deleteDoc(doc(db, 'percorsi', percorsoId, 'unita', unitaId))
-}
-
-// ── Materiali ──
-
-export function onMateriali(percorsoId, callback) {
-  return onSnapshot(materialiRef(percorsoId), (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-  })
-}
-
-export async function addMateriale(percorsoId, data) {
-  return addDoc(materialiRef(percorsoId), data)
-}
-
-export async function updateMateriale(percorsoId, materialeId, data) {
-  return updateDoc(
-    doc(db, 'percorsi', percorsoId, 'materiali', materialeId),
-    data
-  )
-}
-
-export async function deleteMateriale(percorsoId, materialeId) {
-  return deleteDoc(
-    doc(db, 'percorsi', percorsoId, 'materiali', materialeId)
-  )
 }
 
 // ── Assegnazioni ──

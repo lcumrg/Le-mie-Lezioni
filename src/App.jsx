@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage'
 import CalendarioPage from './pages/CalendarioPage'
 import PercorsiPage from './pages/PercorsiPage'
 import ArchivioPage from './pages/ArchivioPage'
+import ImpostazioniPage from './pages/ImpostazioniPage'
 import LoadingSpinner from './components/common/LoadingSpinner'
 
 function ProtectedRoute({ children }) {
@@ -47,6 +48,7 @@ function AppRoutes() {
         <Route path="/calendario" element={<CalendarioPage />} />
         <Route path="/percorsi" element={<PercorsiPage />} />
         <Route path="/archivio" element={<ArchivioPage />} />
+        <Route path="/impostazioni" element={<ImpostazioniPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

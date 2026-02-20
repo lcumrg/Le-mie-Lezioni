@@ -3,6 +3,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  setDoc,
   addDoc,
   updateDoc,
   deleteDoc,
@@ -11,6 +12,7 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp,
+  Timestamp,
 } from 'firebase/firestore'
 import { db } from './firebase'
 
@@ -43,6 +45,10 @@ export function onAnnoScolasticoConfig(callback) {
   return onSnapshot(doc(db, 'config', 'anno_scolastico'), (snap) => {
     callback(snap.exists() ? snap.data() : null)
   })
+}
+
+export async function setAnnoScolasticoConfig(data) {
+  return setDoc(doc(db, 'config', 'anno_scolastico'), data, { merge: true })
 }
 
 // ── Percorsi ──
@@ -128,6 +134,10 @@ export async function updateAssegnazione(id, data) {
   return updateDoc(doc(db, 'assegnazioni', id), data)
 }
 
+export async function deleteAssegnazione(id) {
+  return deleteDoc(doc(db, 'assegnazioni', id))
+}
+
 // ── Orari ──
 
 export function onOrari(annoScolastico, callback) {
@@ -143,6 +153,10 @@ export async function addOrario(data) {
 
 export async function updateOrario(id, data) {
   return updateDoc(doc(db, 'orari', id), data)
+}
+
+export async function deleteOrario(id) {
+  return deleteDoc(doc(db, 'orari', id))
 }
 
 // ── Lezioni ──

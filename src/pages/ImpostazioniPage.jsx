@@ -12,9 +12,23 @@ import {
 import LoadingSpinner from '../components/common/LoadingSpinner'
 
 const GIORNI_LABEL = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
+const GIORNI_SHORT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
+const ORE_ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII']
+
+function generateDefaultOre(count, startTime = '08:00') {
+  const ore = []
+  let [h, m] = startTime.split(':').map(Number)
+  for (let i = 0; i < count; i++) {
+    const inizio = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    h += 1
+    const fine = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    ore.push({ numero: i + 1, inizio, fine })
+  }
+  return ore
+}
 
 export default function ImpostazioniPage() {
-  const { annoAttivo, config, loading: configLoading } = useApp()
+  const { annoAttivo, annoConfig, config, loading: configLoading } = useApp()
 
   // --- Anno scolastico setup ---
   const [annoInput, setAnnoInput] = useState('')
@@ -25,15 +39,18 @@ export default function ImpostazioniPage() {
   const [nuovaClasse, setNuovaClasse] = useState('')
   const [nuovaMateria, setNuovaMateria] = useState('')
 
+  // --- Ore scolastiche ---
+  const [oreLezione, setOreLezione] = useState([])
+  const [giornoLibero, setGiornoLibero] = useState(null)
+  const [savingOre, setSavingOre] = useState(false)
+
   // --- Orari ---
   const [orari, setOrari] = useState([])
   const [orarioForm, setOrarioForm] = useState({
     giorno: 0,
-    oraInizio: '08:00',
-    oraFine: '09:00',
+    numeroOra: 1,
     classe: '',
     materia: '',
-    ore: 1,
   })
 
   // Load assegnazioni & orari when annoAttivo changes
@@ -49,6 +66,24 @@ export default function ImpostazioniPage() {
     if (annoAttivo) setAnnoInput(annoAttivo)
   }, [annoAttivo])
 
+  // Load ore config from annoConfig
+  useEffect(() => {
+    if (annoConfig?.oreLezione) {
+      setOreLezione(annoConfig.oreLezione)
+    }
+    setGiornoLibero(annoConfig?.giornoLibero ?? null)
+  }, [annoConfig])
+
+  // Keep orarioForm.giorno valid (skip giorno libero)
+  useEffect(() => {
+    if (giornoLibero !== null && orarioForm.giorno === giornoLibero) {
+      const firstValid = [0, 1, 2, 3, 4, 5].find((g) => g !== giornoLibero)
+      setOrarioForm((f) => ({ ...f, giorno: firstValid ?? 0 }))
+    }
+  }, [giornoLibero])
+
+  // ── Anno scolastico handlers ──
+
   async function handleSaveAnno(e) {
     e.preventDefault()
     if (!annoInput.trim()) return
@@ -62,6 +97,8 @@ export default function ImpostazioniPage() {
     })
     setSaving(false)
   }
+
+  // ── Assegnazioni handlers ──
 
   async function handleAddAssegnazione(e) {
     e.preventDefault()
@@ -81,17 +118,68 @@ export default function ImpostazioniPage() {
     await deleteAssegnazione(id)
   }
 
+  // ── Ore scolastiche handlers ──
+
+  function handleSetNumeroOre(count) {
+    if (oreLezione.length === 0) {
+      // First time: generate defaults
+      setOreLezione(generateDefaultOre(count))
+    } else if (count > oreLezione.length) {
+      // Adding more periods: continue from last end time
+      const last = oreLezione[oreLezione.length - 1]
+      const additional = generateDefaultOre(count - oreLezione.length, last.fine)
+      const renumbered = additional.map((o, i) => ({
+        ...o,
+        numero: oreLezione.length + i + 1,
+      }))
+      setOreLezione([...oreLezione, ...renumbered])
+    } else {
+      // Fewer periods: trim
+      setOreLezione(oreLezione.slice(0, count))
+    }
+  }
+
+  function handleOraChange(index, field, value) {
+    setOreLezione((prev) =>
+      prev.map((o, i) => (i === index ? { ...o, [field]: value } : o))
+    )
+  }
+
+  async function handleSaveOreConfig() {
+    if (!annoAttivo) return
+    setSavingOre(true)
+    await setAnnoScolasticoConfig({
+      anniScolastici: {
+        ...(config?.anniScolastici || {}),
+        [annoAttivo]: {
+          ...(config?.anniScolastici?.[annoAttivo] || {}),
+          oreLezione,
+          giornoLibero,
+        },
+      },
+    })
+    setSavingOre(false)
+  }
+
+  // ── Orario settimanale handlers ──
+
   async function handleAddOrario(e) {
     e.preventDefault()
     if (!orarioForm.classe || !orarioForm.materia || !annoAttivo) return
+
+    // Derive times from ore config
+    const oraConfig = oreLezione.find((o) => o.numero === orarioForm.numeroOra)
+    if (!oraConfig) return
+
     await addOrario({
       annoScolastico: annoAttivo,
       giorno: orarioForm.giorno,
-      oraInizio: orarioForm.oraInizio,
-      oraFine: orarioForm.oraFine,
+      numeroOra: orarioForm.numeroOra,
+      oraInizio: oraConfig.inizio,
+      oraFine: oraConfig.fine,
       classe: orarioForm.classe,
       materia: orarioForm.materia,
-      ore: Number(orarioForm.ore),
+      ore: 1,
     })
     setOrarioForm((f) => ({ ...f, classe: '', materia: '' }))
   }
@@ -112,9 +200,9 @@ export default function ImpostazioniPage() {
 
   if (configLoading) return <LoadingSpinner />
 
-  // Sort orari by giorno then oraInizio
+  // Sort orari by giorno then numeroOra/oraInizio
   const orariOrdinati = [...orari].sort(
-    (a, b) => a.giorno - b.giorno || a.oraInizio.localeCompare(b.oraInizio)
+    (a, b) => a.giorno - b.giorno || (a.numeroOra || 0) - (b.numeroOra || 0) || a.oraInizio.localeCompare(b.oraInizio)
   )
 
   // Group orari by giorno
@@ -126,6 +214,8 @@ export default function ImpostazioniPage() {
 
   // Unique classes from assegnazioni for orario dropdown
   const classiDisponibili = [...new Set(assegnazioni.map((a) => a.classe))].sort()
+
+  const hasOreConfig = oreLezione.length > 0
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
@@ -228,95 +318,264 @@ export default function ImpostazioniPage() {
         </section>
       )}
 
-      {/* ── 3. Orario Settimanale ── */}
+      {/* ── 3. Ore Scolastiche ── */}
+      {annoAttivo && (
+        <section className="bg-white rounded-lg border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Ore Scolastiche
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Configura gli orari delle ore di lezione giornaliere e il giorno libero.
+          </p>
+
+          {/* Numero ore */}
+          <div className="mb-5">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Ore giornaliere
+            </label>
+            <div className="flex gap-2">
+              {[4, 5, 6, 7, 8].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => handleSetNumeroOre(n)}
+                  className={`w-10 h-10 rounded-lg text-sm font-semibold transition-colors ${
+                    oreLezione.length === n
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tabella ore */}
+          {oreLezione.length > 0 && (
+            <div className="mb-5">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b border-gray-200">
+                    <th className="pb-2 w-16">Ora</th>
+                    <th className="pb-2">Inizio</th>
+                    <th className="pb-2">Fine</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {oreLezione.map((ora, i) => (
+                    <tr key={i} className="border-b border-gray-100">
+                      <td className="py-2 font-semibold text-gray-700">
+                        {ORE_ROMAN[i]}
+                      </td>
+                      <td className="py-2">
+                        <input
+                          type="time"
+                          value={ora.inizio}
+                          onChange={(e) => handleOraChange(i, 'inizio', e.target.value)}
+                          className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        />
+                      </td>
+                      <td className="py-2">
+                        <input
+                          type="time"
+                          value={ora.fine}
+                          onChange={(e) => handleOraChange(i, 'fine', e.target.value)}
+                          className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Giorno libero */}
+          <div className="mb-5">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Giorno libero
+            </label>
+            <select
+              value={giornoLibero ?? ''}
+              onChange={(e) =>
+                setGiornoLibero(e.target.value === '' ? null : Number(e.target.value))
+              }
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            >
+              <option value="">Nessuno</option>
+              {GIORNI_LABEL.map((g, i) => (
+                <option key={i} value={i}>
+                  {g}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSaveOreConfig}
+            disabled={savingOre || oreLezione.length === 0}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {savingOre ? 'Salvataggio...' : 'Salva configurazione'}
+          </button>
+        </section>
+      )}
+
+      {/* ── 4. Orario Settimanale ── */}
       {annoAttivo && assegnazioni.length > 0 && (
         <section className="bg-white rounded-lg border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
             Orario Settimanale
           </h2>
           <p className="text-sm text-gray-500 mb-4">
-            Definisci il tuo orario ricorrente. Per ogni slot indica giorno, ora e classe.
+            Definisci il tuo orario ricorrente. Seleziona giorno, ora e classe.
           </p>
 
-          <form onSubmit={handleAddOrario} className="flex flex-wrap items-end gap-3 mb-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Giorno</label>
-              <select
-                value={orarioForm.giorno}
-                onChange={(e) =>
-                  setOrarioForm((f) => ({ ...f, giorno: Number(e.target.value) }))
-                }
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              >
-                {GIORNI_LABEL.map((g, i) => (
-                  <option key={i} value={i}>
-                    {g}
-                  </option>
-                ))}
-              </select>
+          {!hasOreConfig && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800">
+                Configura prima le <strong>Ore Scolastiche</strong> qui sopra per poter inserire l'orario in modo rapido.
+              </p>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Inizio</label>
-              <input
-                type="time"
-                value={orarioForm.oraInizio}
-                onChange={(e) =>
-                  setOrarioForm((f) => ({ ...f, oraInizio: e.target.value }))
-                }
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Fine</label>
-              <input
-                type="time"
-                value={orarioForm.oraFine}
-                onChange={(e) =>
-                  setOrarioForm((f) => ({ ...f, oraFine: e.target.value }))
-                }
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Classe</label>
-              <select
-                value={orarioForm.classe}
-                onChange={(e) => handleOrarioClasseChange(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              >
-                <option value="">—</option>
-                {classiDisponibili.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ore</label>
-              <input
-                type="number"
-                min={1}
-                max={4}
-                value={orarioForm.ore}
-                onChange={(e) =>
-                  setOrarioForm((f) => ({ ...f, ore: e.target.value }))
-                }
-                className="w-16 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={!orarioForm.classe}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              Aggiungi
-            </button>
-          </form>
+          )}
 
-          {/* Orario grid per giorno */}
+          {hasOreConfig ? (
+            /* ── Form semplificato con numero ora ── */
+            <form onSubmit={handleAddOrario} className="flex flex-wrap items-end gap-3 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Giorno</label>
+                <select
+                  value={orarioForm.giorno}
+                  onChange={(e) =>
+                    setOrarioForm((f) => ({ ...f, giorno: Number(e.target.value) }))
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  {GIORNI_LABEL.map((g, i) => {
+                    if (i === giornoLibero) return null
+                    return (
+                      <option key={i} value={i}>
+                        {g}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ora</label>
+                <select
+                  value={orarioForm.numeroOra}
+                  onChange={(e) =>
+                    setOrarioForm((f) => ({ ...f, numeroOra: Number(e.target.value) }))
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  {oreLezione.map((o) => (
+                    <option key={o.numero} value={o.numero}>
+                      {ORE_ROMAN[o.numero - 1]} ({o.inizio}–{o.fine})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Classe</label>
+                <select
+                  value={orarioForm.classe}
+                  onChange={(e) => handleOrarioClasseChange(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">—</option>
+                  {classiDisponibili.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={!orarioForm.classe}
+                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                Aggiungi
+              </button>
+            </form>
+          ) : (
+            /* ── Fallback: form manuale (senza config ore) ── */
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              if (!orarioForm.classe || !orarioForm.materia || !annoAttivo) return
+              addOrario({
+                annoScolastico: annoAttivo,
+                giorno: orarioForm.giorno,
+                oraInizio: orarioForm.oraInizio || '08:00',
+                oraFine: orarioForm.oraFine || '09:00',
+                classe: orarioForm.classe,
+                materia: orarioForm.materia,
+                ore: 1,
+              }).then(() => setOrarioForm((f) => ({ ...f, classe: '', materia: '' })))
+            }} className="flex flex-wrap items-end gap-3 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Giorno</label>
+                <select
+                  value={orarioForm.giorno}
+                  onChange={(e) =>
+                    setOrarioForm((f) => ({ ...f, giorno: Number(e.target.value) }))
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  {GIORNI_LABEL.map((g, i) => (
+                    <option key={i} value={i}>{g}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Inizio</label>
+                <input
+                  type="time"
+                  value={orarioForm.oraInizio || '08:00'}
+                  onChange={(e) => setOrarioForm((f) => ({ ...f, oraInizio: e.target.value }))}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fine</label>
+                <input
+                  type="time"
+                  value={orarioForm.oraFine || '09:00'}
+                  onChange={(e) => setOrarioForm((f) => ({ ...f, oraFine: e.target.value }))}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Classe</label>
+                <select
+                  value={orarioForm.classe}
+                  onChange={(e) => handleOrarioClasseChange(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">—</option>
+                  {classiDisponibili.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={!orarioForm.classe}
+                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                Aggiungi
+              </button>
+            </form>
+          )}
+
+          {/* Orario display per giorno */}
           <div className="space-y-4">
             {GIORNI_LABEL.map((giornoLabel, gi) => {
+              if (gi === giornoLibero) return null
               const slots = orariPerGiorno[gi] || []
               if (slots.length === 0) return null
               return (
@@ -330,14 +589,16 @@ export default function ImpostazioniPage() {
                         key={o.id}
                         className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg text-sm"
                       >
-                        <span className="font-mono text-gray-500 w-28 shrink-0">
+                        <span className="font-semibold text-blue-600 w-10 shrink-0">
+                          {o.numeroOra ? ORE_ROMAN[o.numeroOra - 1] : '—'}
+                        </span>
+                        <span className="font-mono text-gray-400 w-28 shrink-0 text-xs">
                           {o.oraInizio} – {o.oraFine}
                         </span>
                         <span className="font-semibold text-gray-800 w-12">
                           {o.classe}
                         </span>
                         <span className="text-gray-600 flex-1">{o.materia}</span>
-                        <span className="text-gray-400 w-8">{o.ore}h</span>
                         <button
                           onClick={() => handleDeleteOrario(o.id)}
                           className="text-red-400 hover:text-red-600 ml-2"
@@ -352,6 +613,14 @@ export default function ImpostazioniPage() {
                 </div>
               )
             })}
+
+            {/* Show free day indicator */}
+            {giornoLibero !== null && (
+              <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-400 italic">
+                {GIORNI_LABEL[giornoLibero]} — giorno libero
+              </div>
+            )}
+
             {orari.length === 0 && (
               <p className="text-sm text-gray-400">
                 Nessun orario definito. Aggiungi i tuoi slot settimanali sopra.

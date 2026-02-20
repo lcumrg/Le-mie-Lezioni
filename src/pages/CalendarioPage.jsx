@@ -31,7 +31,7 @@ const STATO_BADGE = {
 }
 
 export default function CalendarioPage() {
-  const { annoAttivo, loading: configLoading } = useApp()
+  const { annoAttivo, annoConfig, loading: configLoading } = useApp()
   const [lezioni, setLezioni] = useState([])
   const [orari, setOrari] = useState([])
   const [assegnazioni, setAssegnazioni] = useState([])
@@ -92,6 +92,9 @@ export default function CalendarioPage() {
     return days
   }, [start, lezioni, orari])
 
+  // School hours config
+  const giornoLibero = annoConfig?.giornoLibero ?? null
+
   // Generate lessons from timetable for the current week
   async function handleGenerate() {
     if (!annoAttivo || orari.length === 0) return
@@ -110,6 +113,9 @@ export default function CalendarioPage() {
 
     const promises = []
     for (let i = 0; i < 6; i++) {
+      // Skip giorno libero
+      if (i === giornoLibero) continue
+
       const date = addDays(start, i)
       const dayStr = format(date, 'yyyy-MM-dd')
       const slotsForDay = orari.filter((o) => o.giorno === i)
@@ -123,6 +129,7 @@ export default function CalendarioPage() {
             annoScolastico: annoAttivo,
             data: Timestamp.fromDate(startOfDay(date)),
             giorno: i,
+            numeroOra: slot.numeroOra || null,
             oraInizio: slot.oraInizio,
             oraFine: slot.oraFine,
             classe: slot.classe,

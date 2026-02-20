@@ -4,10 +4,12 @@ import {
   onLezioniSettimana,
   onOrari,
   onAssegnazioni,
+  onPercorsi,
   addLezione,
   updateLezione,
   deleteLezione,
 } from '../lib/firestore'
+import PercorsoSelector from '../components/calendario/PercorsoSelector'
 import { getWeekRange } from '../lib/settimane'
 import { format, addDays, isToday, isBefore, startOfDay } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -33,6 +35,7 @@ export default function CalendarioPage() {
   const [lezioni, setLezioni] = useState([])
   const [orari, setOrari] = useState([])
   const [assegnazioni, setAssegnazioni] = useState([])
+  const [percorsi, setPercorsi] = useState([])
   const [weekOffset, setWeekOffset] = useState(0)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
@@ -53,8 +56,11 @@ export default function CalendarioPage() {
     })
     const unsub2 = onOrari(annoAttivo, setOrari)
     const unsub3 = onAssegnazioni(annoAttivo, setAssegnazioni)
+    const unsub4 = onPercorsi((all) => {
+      setPercorsi(all.filter((p) => p.annoScolastico === annoAttivo))
+    })
 
-    return () => { unsub1(); unsub2(); unsub3() }
+    return () => { unsub1(); unsub2(); unsub3(); unsub4() }
   }, [annoAttivo, weekOffset])
 
   // Build day structure
@@ -142,8 +148,14 @@ export default function CalendarioPage() {
   // Save edited lesson
   async function handleSaveEdit() {
     if (!editingLezione) return
-    const { id, note, titoloOverride, stato } = editingLezione
-    await updateLezione(id, { note, titoloOverride, stato })
+    const { id, note, titoloOverride, stato, percorsoId, unitaId } = editingLezione
+    await updateLezione(id, {
+      note,
+      titoloOverride,
+      stato,
+      percorsoId: percorsoId || null,
+      unitaId: unitaId || null,
+    })
     setEditingLezione(null)
   }
 
@@ -268,8 +280,15 @@ export default function CalendarioPage() {
                       <span className="text-sm font-bold text-gray-800 w-12 shrink-0">
                         {lez.classe}
                       </span>
-                      <span className="text-sm text-gray-600 flex-1">
-                        {lez.titoloOverride || lez.materia}
+                      <span className="text-sm text-gray-600 flex-1 min-w-0">
+                        <span className="truncate block">
+                          {lez.titoloOverride || lez.materia}
+                        </span>
+                        {lez.percorsoId && (
+                          <span className="text-[10px] text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full inline-block mt-0.5">
+                            {percorsi.find((p) => p.id === lez.percorsoId)?.titolo || 'Percorso'}
+                          </span>
+                        )}
                       </span>
                       <span className="text-xs text-gray-400">{lez.ore}h</span>
 
@@ -296,7 +315,15 @@ export default function CalendarioPage() {
                           setEditingLezione(
                             editingLezione?.id === lez.id
                               ? null
-                              : { id: lez.id, note: lez.note || '', titoloOverride: lez.titoloOverride || '', stato: lez.stato }
+                              : {
+                                  id: lez.id,
+                                  note: lez.note || '',
+                                  titoloOverride: lez.titoloOverride || '',
+                                  stato: lez.stato,
+                                  percorsoId: lez.percorsoId || null,
+                                  unitaId: lez.unitaId || null,
+                                  classe: lez.classe,
+                                }
                           )
                         }
                         className="text-gray-400 hover:text-gray-600"
@@ -315,6 +342,23 @@ export default function CalendarioPage() {
                     {/* Edit panel */}
                     {editingLezione?.id === lez.id && (
                       <div className="mt-3 pt-3 border-t border-gray-200 space-y-3">
+                        {/* Percorso selector */}
+                        <PercorsoSelector
+                          percorsi={percorsi.filter((p) => p.classe === lez.classe)}
+                          percorsoId={editingLezione.percorsoId}
+                          unitaId={editingLezione.unitaId}
+                          onChange={({ percorsoId: pId, unitaId: uId, unitaTitolo }) => {
+                            setEditingLezione((prev) => ({
+                              ...prev,
+                              percorsoId: pId,
+                              unitaId: uId,
+                              // Auto-suggest title if field is empty
+                              titoloOverride:
+                                uId && !prev.titoloOverride ? unitaTitolo : prev.titoloOverride,
+                            }))
+                          }}
+                        />
+
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">
                             Titolo/argomento

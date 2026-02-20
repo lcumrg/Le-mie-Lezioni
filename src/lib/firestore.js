@@ -191,3 +191,10 @@ export async function updateLezione(id, data) {
 export async function deleteLezione(id) {
   return deleteDoc(doc(db, 'lezioni', id))
 }
+
+export function onLezioniByPercorso(percorsoId, callback) {
+  const q = query(lezioniRef, where('percorsoId', '==', percorsoId))
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+  })
+}

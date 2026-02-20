@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
+import { format } from 'date-fns'
+import { it } from 'date-fns/locale'
 import {
   onUnita,
   addUnita,
   updateUnita,
   deleteUnita,
+  onLezioniByPercorso,
 } from '../../lib/firestore'
 
 const STATO_LABEL = {
@@ -36,12 +39,16 @@ export default function UnitaPanel({ percorso }) {
   // Material form
   const [matForm, setMatForm] = useState({ tipo: 'link', titolo: '', url: '', testo: '' })
 
+  // Linked lessons
+  const [lezioniCollegate, setLezioniCollegate] = useState([])
+
   useEffect(() => {
-    const unsub = onUnita(percorso.id, (data) => {
+    const unsub1 = onUnita(percorso.id, (data) => {
       setUnita(data)
       setLoading(false)
     })
-    return unsub
+    const unsub2 = onLezioniByPercorso(percorso.id, setLezioniCollegate)
+    return () => { unsub1(); unsub2() }
   }, [percorso.id])
 
   function resetForm() {
@@ -135,6 +142,17 @@ export default function UnitaPanel({ percorso }) {
     await updateUnita(percorso.id, unitaId, { materiali })
   }
 
+  // Helper: get linked lessons for a specific unit
+  function lezioniPerUnita(unitaId) {
+    return lezioniCollegate
+      .filter((l) => l.unitaId === unitaId)
+      .sort((a, b) => {
+        const da = a.data?.toDate ? a.data.toDate() : new Date(a.data)
+        const db2 = b.data?.toDate ? b.data.toDate() : new Date(b.data)
+        return da - db2
+      })
+  }
+
   // Progress
   const totale = unita.length
   const completate = unita.filter((u) => u.stato === 'completata').length
@@ -143,6 +161,9 @@ export default function UnitaPanel({ percorso }) {
   const oreCompletate = unita
     .filter((u) => u.stato === 'completata')
     .reduce((s, u) => s + (u.orePreviste || 0), 0)
+  const oreReali = lezioniCollegate
+    .filter((l) => l.stato === 'svolta')
+    .reduce((s, l) => s + (l.ore || 0), 0)
 
   if (loading) {
     return <p className="text-sm text-gray-400 py-4">Caricamento unita...</p>
@@ -160,7 +181,7 @@ export default function UnitaPanel({ percorso }) {
             />
           </div>
           <span className="text-xs text-gray-500 shrink-0">
-            {completate}/{totale} unita ({oreCompletate}/{oreTotali}h)
+            {completate}/{totale} unita · {oreReali}h svolte / {oreTotali}h previste
           </span>
         </div>
       )}
@@ -208,7 +229,24 @@ export default function UnitaPanel({ percorso }) {
                 )}
               </div>
 
-              <span className="text-xs text-gray-400 shrink-0">{u.orePreviste || 0}h</span>
+              {/* Hours: real / planned */}
+              {(() => {
+                const uLez = lezioniPerUnita(u.id)
+                const uOreReali = uLez.filter((l) => l.stato === 'svolta').reduce((s, l) => s + (l.ore || 0), 0)
+                return (
+                  <span className="text-xs text-gray-400 shrink-0">
+                    {uOreReali > 0 && <span className="text-green-600">{uOreReali}/</span>}
+                    {u.orePreviste || 0}h
+                  </span>
+                )
+              })()}
+
+              {/* Linked lessons count */}
+              {lezioniPerUnita(u.id).length > 0 && (
+                <span className="text-xs text-purple-500 shrink-0">
+                  {lezioniPerUnita(u.id).length} lez.
+                </span>
+              )}
 
               {/* Materials count */}
               {(u.materiali?.length || 0) > 0 && (
@@ -256,9 +294,53 @@ export default function UnitaPanel({ percorso }) {
               </button>
             </div>
 
-            {/* Expanded: materials */}
+            {/* Expanded: linked lessons + materials */}
             {expandedId === u.id && (
-              <div className="px-3 pb-3 pt-1 border-t border-gray-200 bg-white">
+              <div className="px-3 pb-3 pt-1 border-t border-gray-200 bg-white space-y-3">
+                {/* Linked lessons */}
+                {(() => {
+                  const uLez = lezioniPerUnita(u.id)
+                  if (uLez.length === 0) return null
+
+                  const STATO_LEZ = {
+                    pianificata: 'bg-blue-100 text-blue-700',
+                    svolta: 'bg-green-100 text-green-700',
+                    saltata: 'bg-red-100 text-red-700',
+                  }
+
+                  return (
+                    <div>
+                      <p className="text-xs font-medium text-gray-600 mb-1.5">
+                        Lezioni collegate ({uLez.length})
+                      </p>
+                      <div className="space-y-1">
+                        {uLez.map((l) => {
+                          const d = l.data?.toDate ? l.data.toDate() : new Date(l.data)
+                          return (
+                            <div key={l.id} className="flex items-center gap-2 text-xs">
+                              <span className="text-gray-500 font-mono w-20 shrink-0">
+                                {format(d, 'dd MMM yyyy', { locale: it })}
+                              </span>
+                              <span className="text-gray-400 w-16 shrink-0">
+                                {l.oraInizio}–{l.oraFine}
+                              </span>
+                              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${STATO_LEZ[l.stato] || ''}`}>
+                                {l.stato === 'svolta' ? 'Svolta' : l.stato === 'saltata' ? 'Saltata' : 'Pianificata'}
+                              </span>
+                              <span className="text-gray-400">{l.ore || 0}h</span>
+                              {l.note && (
+                                <span className="text-gray-400 truncate flex-1 italic">
+                                  {l.note}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
+
                 <p className="text-xs font-medium text-gray-600 mb-2">Materiali</p>
 
                 {/* Existing materials */}

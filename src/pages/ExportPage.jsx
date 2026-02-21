@@ -211,6 +211,49 @@ export default function ExportPage() {
     return rows
   }, [orari, selectedClasse, giornoLibero])
 
+  // ── Slot → Percorso/Unita lookup ──
+  const slotContent = useMemo(() => {
+    const map = {} // key: "giorno-numeroOra" → { percorso, unita }
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+
+    for (const g of allGiorni) {
+      const maxOra = Math.max(0, ...orari.filter((o) => o.classe === selectedClasse && o.giorno === g).map((o) => o.numeroOra || 0))
+      for (let ora = 1; ora <= maxOra; ora++) {
+        const key = `${g}-${ora}`
+        // Find lezioni for this slot, sorted by date descending
+        const slotLezioni = classeLezioni
+          .filter((l) => l.giorno === g && l.numeroOra === ora && l.percorsoId)
+          .sort((a, b) => {
+            const da = a.data?.toDate ? a.data.toDate() : new Date(a.data)
+            const db = b.data?.toDate ? b.data.toDate() : new Date(b.data)
+            return db - da
+          })
+
+        // Prefer next upcoming pianificata, otherwise most recent with percorsoId
+        const nextPianificata = slotLezioni.find((l) => {
+          const d = l.data?.toDate ? l.data.toDate() : new Date(l.data)
+          return d >= now && l.stato === STATO_LEZIONE.PIANIFICATA
+        })
+        const target = nextPianificata || slotLezioni[0]
+
+        if (target?.percorsoId) {
+          const percorso = allPercorsi.find((p) => p.id === target.percorsoId)
+          const unita = target.unitaId
+            ? (unitaByPercorso[target.percorsoId] || []).find((u) => u.id === target.unitaId)
+            : null
+          if (percorso) {
+            map[key] = {
+              percorso: percorso.titolo,
+              unita: unita?.titolo || null,
+            }
+          }
+        }
+      }
+    }
+    return map
+  }, [allGiorni, orari, classeLezioni, allPercorsi, unitaByPercorso, selectedClasse])
+
   // ── Helpers ──
   async function handleCopy(text) {
     try {
@@ -253,6 +296,8 @@ export default function ExportPage() {
   .ora { font-weight: 600; background: #f8f8f8; }
   .time { font-size: 10px; color: #999; }
   .empty { color: #ccc; }
+  .percorso { font-size: 10px; color: #2563eb; font-weight: 600; margin-top: 2px; }
+  .unita { font-size: 9px; color: #666; }
   @media print { body { margin: 10px; } }
 </style></head><body>
   <h1>Orario Settimanale — Classe ${selectedClasse}</h1>
@@ -458,9 +503,22 @@ export default function ExportPage() {
                           </td>
                           {allGiorni.map((g) => {
                             const slot = row[g]
+                            const info = slotContent[`${g}-${row.ora}`]
                             return (
-                              <td key={g} className={`border border-gray-200 px-3 py-3 text-center ${slot ? 'text-gray-800' : 'text-gray-300'}`}>
-                                {slot ? <span className="font-medium">{slot.materia}</span> : '—'}
+                              <td key={g} className={`border border-gray-200 px-2 py-2 text-center ${slot ? 'text-gray-800' : 'text-gray-300'}`}>
+                                {slot ? (
+                                  <div>
+                                    <div className="font-medium text-sm">{slot.materia}</div>
+                                    {info && (
+                                      <div className="mt-0.5">
+                                        <div className="text-[11px] text-blue-600 font-medium leading-tight">{info.percorso}</div>
+                                        {info.unita && (
+                                          <div className="text-[10px] text-gray-500 leading-tight">{info.unita}</div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : '—'}
                               </td>
                             )
                           })}

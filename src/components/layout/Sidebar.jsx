@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useApp } from '../../contexts/AppContext'
+import { setAnnoScolasticoConfig } from '../../lib/firestore'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1' },
@@ -13,7 +14,18 @@ const navItems = [
 
 export default function Sidebar({ open, onClose }) {
   const { user, logout } = useAuth()
-  const { annoAttivo } = useApp()
+  const { config, annoAttivo } = useApp()
+
+  const anniDisponibili = config?.anniScolastici
+    ? Object.keys(config.anniScolastici).sort().reverse()
+    : []
+
+  async function handleAnnoChange(e) {
+    const nuovoAnno = e.target.value
+    if (nuovoAnno && nuovoAnno !== annoAttivo) {
+      await setAnnoScolasticoConfig({ annoAttivo: nuovoAnno })
+    }
+  }
 
   return (
     <>
@@ -37,9 +49,19 @@ export default function Sidebar({ open, onClose }) {
           {/* Header */}
           <div className="p-4 border-b border-gray-200">
             <h1 className="text-lg font-bold text-gray-900">Le Mie Lezioni</h1>
-            {annoAttivo && (
+            {anniDisponibili.length > 1 ? (
+              <select
+                value={annoAttivo || ''}
+                onChange={handleAnnoChange}
+                className="mt-1 w-full px-2 py-1 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none cursor-pointer"
+              >
+                {anniDisponibili.map((a) => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
+            ) : annoAttivo ? (
               <p className="text-sm text-gray-500 mt-1">{annoAttivo}</p>
-            )}
+            ) : null}
           </div>
 
           {/* Navigation */}

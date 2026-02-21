@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   addDoc,
   updateDoc,
@@ -197,4 +198,73 @@ export function onLezioniByPercorso(percorsoId, callback) {
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
   })
+}
+
+// ── Archivio ──
+
+/** Fetch percorsi for a year (one-shot, for archive view) */
+export async function getPercorsi(annoScolastico) {
+  const q = query(percorsiRef, where('annoScolastico', '==', annoScolastico))
+  const snap = await getDocs(q)
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+/** Fetch unita for a percorso (one-shot) */
+export async function getUnita(percorsoId) {
+  const q = query(unitaRef(percorsoId), orderBy('ordine'))
+  const snap = await getDocs(q)
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+/** Fetch lezioni for a year (one-shot, for archive stats) */
+export async function getLezioni(annoScolastico) {
+  const q = query(lezioniRef, where('annoScolastico', '==', annoScolastico))
+  const snap = await getDocs(q)
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+/** Fetch assegnazioni for a year (one-shot) */
+export async function getAssegnazioni(annoScolastico) {
+  const q = query(assegnazioniRef, where('annoScolastico', '==', annoScolastico))
+  const snap = await getDocs(q)
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+/**
+ * Clone percorsi (with their unita) from one anno to another.
+ * Unita are copied with stato reset to 'da_fare'.
+ * Returns count of cloned percorsi.
+ */
+export async function clonePercorsiToAnno(annoOrigine, annoDestinazione) {
+  const percorsi = await getPercorsi(annoOrigine)
+  let count = 0
+
+  for (const p of percorsi) {
+    // Create new percorso
+    const newPercorsoRef = await addDoc(percorsiRef, {
+      annoScolastico: annoDestinazione,
+      classe: p.classe,
+      materia: p.materia || '',
+      titolo: p.titolo,
+      descrizione: p.descrizione || '',
+      createdAt: serverTimestamp(),
+    })
+
+    // Copy unita
+    const unita = await getUnita(p.id)
+    for (const u of unita) {
+      await addDoc(unitaRef(newPercorsoRef.id), {
+        titolo: u.titolo,
+        descrizione: u.descrizione || '',
+        ordine: u.ordine,
+        orePreviste: u.orePreviste || 0,
+        stato: 'da_fare',
+        materiali: u.materiali || [],
+      })
+    }
+
+    count++
+  }
+
+  return count
 }

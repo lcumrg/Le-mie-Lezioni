@@ -1,0 +1,483 @@
+import { useEffect, useState, useMemo, useRef } from 'react'
+import { useApp } from '../contexts/AppContext'
+import { useToast } from '../contexts/ToastContext'
+import { STATO_UNITA_LABEL, STATO_LEZIONE, GIORNI_LABEL, ORE_ROMAN } from '../lib/costanti'
+import {
+  onAssegnazioni,
+  onOrari,
+  onPercorsi,
+  onUnita,
+  onLezioni,
+} from '../lib/firestore'
+import LoadingSpinner from '../components/common/LoadingSpinner'
+
+export default function ExportPage() {
+  const { annoAttivo, annoConfig, loading: configLoading } = useApp()
+  const toast = useToast()
+
+  const [assegnazioni, setAssegnazioni] = useState([])
+  const [orari, setOrari] = useState([])
+  const [allPercorsi, setAllPercorsi] = useState([])
+  const [unitaByPercorso, setUnitaByPercorso] = useState({})
+  const [lezioni, setLezioni] = useState([])
+  const [selectedClasse, setSelectedClasse] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('iniziale')
+
+  const giornoLibero = annoConfig?.giornoLibero ?? null
+
+  // ── Load data ──
+  useEffect(() => {
+    if (!annoAttivo) { setLoading(false); return }
+    setLoading(true)
+    const unsubs = []
+    unsubs.push(onAssegnazioni(annoAttivo, (data) => {
+      const active = data.filter((a) => a.attiva && !a.archiviata)
+      setAssegnazioni(active)
+      if (!selectedClasse && active.length > 0) setSelectedClasse(active[0].classe)
+      setLoading(false)
+    }))
+    unsubs.push(onOrari(annoAttivo, setOrari))
+    unsubs.push(onPercorsi(annoAttivo, (all) => setAllPercorsi(all)))
+    unsubs.push(onLezioni(annoAttivo, setLezioni))
+    return () => unsubs.forEach((u) => u())
+  }, [annoAttivo])
+
+  // Load unita for percorsi of selected class
+  const classePercorsi = useMemo(
+    () => allPercorsi.filter((p) => p.classe === selectedClasse),
+    [allPercorsi, selectedClasse]
+  )
+
+  useEffect(() => {
+    if (classePercorsi.length === 0) return
+    const unsubs = []
+    for (const p of classePercorsi) {
+      unsubs.push(onUnita(p.id, (units) => {
+        setUnitaByPercorso((prev) => ({ ...prev, [p.id]: units }))
+      }))
+    }
+    return () => unsubs.forEach((u) => u())
+  }, [classePercorsi.map((p) => p.id).join(',')])
+
+  const classi = useMemo(
+    () => [...new Set(assegnazioni.map((a) => a.classe))].sort(),
+    [assegnazioni]
+  )
+
+  const materia = useMemo(() => {
+    const a = assegnazioni.find((a) => a.classe === selectedClasse)
+    return a?.materia || ''
+  }, [assegnazioni, selectedClasse])
+
+  const classeLezioni = useMemo(
+    () => lezioni.filter((l) => l.classe === selectedClasse),
+    [lezioni, selectedClasse]
+  )
+
+  // ── Testo: Programmazione Iniziale ──
+  const testoIniziale = useMemo(() => {
+    if (!selectedClasse || classePercorsi.length === 0) return ''
+
+    const lines = []
+    lines.push('PROGRAMMAZIONE ANNUALE')
+    lines.push(`Classe ${selectedClasse}${materia ? ` — ${materia}` : ''}`)
+    lines.push(`Anno Scolastico ${annoAttivo}`)
+    lines.push('')
+    lines.push('══════════════════════════════════════════════════')
+
+    let oreTotali = 0
+
+    classePercorsi.forEach((p, pi) => {
+      const units = (unitaByPercorso[p.id] || [])
+        .slice()
+        .sort((a, b) => (a.ordine || 0) - (b.ordine || 0))
+      const orePercorso = units.reduce((s, u) => s + (u.orePreviste || 0), 0)
+      oreTotali += orePercorso
+
+      lines.push('')
+      lines.push(`PERCORSO ${pi + 1}: ${p.titolo}${orePercorso ? ` (${orePercorso} ore)` : ''}`)
+      if (p.descrizione) lines.push(`  ${p.descrizione}`)
+      lines.push('────────────────────────────────────────')
+
+      if (units.length === 0) {
+        lines.push('  Nessuna unita definita')
+      } else {
+        units.forEach((u) => {
+          lines.push(`  ${u.ordine || '-'}) ${u.titolo}${u.orePreviste ? ` — ${u.orePreviste} ore` : ''}`)
+          if (u.descrizione) lines.push(`     ${u.descrizione}`)
+        })
+      }
+    })
+
+    lines.push('')
+    lines.push('══════════════════════════════════════════════════')
+    lines.push('RIEPILOGO')
+    lines.push(`  Percorsi totali: ${classePercorsi.length}`)
+    lines.push(`  Ore totali pianificate: ${oreTotali}`)
+
+    return lines.join('\n')
+  }, [selectedClasse, classePercorsi, unitaByPercorso, materia, annoAttivo])
+
+  // ── Testo: Programmazione Svolta ──
+  const testoSvolta = useMemo(() => {
+    if (!selectedClasse || classePercorsi.length === 0) return ''
+
+    const orePerUnita = {}
+    const lezioniPerPercorso = {}
+    for (const l of classeLezioni) {
+      if (l.stato === STATO_LEZIONE.SVOLTA) {
+        if (l.unitaId) {
+          orePerUnita[l.unitaId] = (orePerUnita[l.unitaId] || 0) + (l.ore || 1)
+        }
+        if (l.percorsoId) {
+          lezioniPerPercorso[l.percorsoId] = (lezioniPerPercorso[l.percorsoId] || 0) + (l.ore || 1)
+        }
+      }
+    }
+
+    const lezioniSvolte = classeLezioni.filter((l) => l.stato === STATO_LEZIONE.SVOLTA).length
+    const lezioniSaltate = classeLezioni.filter((l) => l.stato === STATO_LEZIONE.SALTATA).length
+
+    const lines = []
+    lines.push('RELAZIONE FINALE — PROGRAMMAZIONE SVOLTA')
+    lines.push(`Classe ${selectedClasse}${materia ? ` — ${materia}` : ''}`)
+    lines.push(`Anno Scolastico ${annoAttivo}`)
+    lines.push('')
+    lines.push('══════════════════════════════════════════════════')
+
+    let orePrevisteTotali = 0
+    let oreSvolteTotali = 0
+
+    classePercorsi.forEach((p, pi) => {
+      const units = (unitaByPercorso[p.id] || [])
+        .slice()
+        .sort((a, b) => (a.ordine || 0) - (b.ordine || 0))
+      const orePercorsoPreviste = units.reduce((s, u) => s + (u.orePreviste || 0), 0)
+      const orePercorsoSvolte = lezioniPerPercorso[p.id] || 0
+      orePrevisteTotali += orePercorsoPreviste
+      oreSvolteTotali += orePercorsoSvolte
+
+      lines.push('')
+      lines.push(`PERCORSO ${pi + 1}: ${p.titolo}`)
+      lines.push(`  Ore previste: ${orePercorsoPreviste} | Ore effettuate: ${orePercorsoSvolte}`)
+      if (p.descrizione) lines.push(`  ${p.descrizione}`)
+      lines.push('────────────────────────────────────────')
+
+      if (units.length === 0) {
+        lines.push('  Nessuna unita definita')
+      } else {
+        units.forEach((u) => {
+          const oreSvolteU = orePerUnita[u.id] || 0
+          const statoLabel = STATO_UNITA_LABEL[u.stato] || u.stato
+          lines.push(`  ${u.ordine || '-'}) ${u.titolo} — ${statoLabel.toUpperCase()}`)
+          lines.push(`     Ore previste: ${u.orePreviste || 0} | Ore effettuate: ${oreSvolteU}`)
+          if (u.descrizione) lines.push(`     ${u.descrizione}`)
+        })
+      }
+    })
+
+    lines.push('')
+    lines.push('══════════════════════════════════════════════════')
+    lines.push('RIEPILOGO GENERALE')
+    lines.push(`  Ore totali previste: ${orePrevisteTotali}`)
+    lines.push(`  Ore totali effettuate: ${oreSvolteTotali}`)
+    lines.push(`  Lezioni svolte: ${lezioniSvolte}`)
+    lines.push(`  Lezioni saltate: ${lezioniSaltate}`)
+    if (orePrevisteTotali > 0) {
+      const percentuale = Math.round((oreSvolteTotali / orePrevisteTotali) * 100)
+      lines.push(`  Completamento: ${percentuale}%`)
+    }
+
+    return lines.join('\n')
+  }, [selectedClasse, classePercorsi, unitaByPercorso, classeLezioni, materia, annoAttivo])
+
+  // ── Orario grid data ──
+  const allGiorni = [0, 1, 2, 3, 4, 5].filter((g) => g !== giornoLibero)
+
+  const orarioRows = useMemo(() => {
+    const classeOrari = orari
+      .filter((o) => o.classe === selectedClasse && o.giorno !== giornoLibero)
+      .sort((a, b) => a.giorno - b.giorno || (a.numeroOra || 0) - (b.numeroOra || 0))
+    const maxOra = Math.max(0, ...classeOrari.map((o) => o.numeroOra || 0))
+    const rows = []
+    for (let ora = 1; ora <= maxOra; ora++) {
+      const row = { ora }
+      for (const g of allGiorni) {
+        row[g] = classeOrari.find((o) => o.giorno === g && o.numeroOra === ora) || null
+      }
+      rows.push(row)
+    }
+    return rows
+  }, [orari, selectedClasse, giornoLibero])
+
+  // ── Helpers ──
+  async function handleCopy(text) {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success('Testo copiato negli appunti!')
+    } catch {
+      toast.error('Impossibile copiare. Prova a selezionare e copiare manualmente.')
+    }
+  }
+
+  function handleDownload(text, filename) {
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const orarioPrintRef = useRef(null)
+
+  function handlePrintOrario() {
+    const content = orarioPrintRef.current
+    if (!content) return
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      toast.error('Il browser ha bloccato la finestra. Consenti i popup per questa pagina.')
+      return
+    }
+    printWindow.document.write(`<!DOCTYPE html>
+<html><head><title>Orario ${selectedClasse} - ${annoAttivo}</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 24px; }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  h2 { font-size: 14px; font-weight: normal; color: #666; margin-bottom: 16px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #333; padding: 8px 12px; text-align: center; font-size: 13px; }
+  th { background: #f0f0f0; font-weight: 600; }
+  .ora { font-weight: 600; background: #f8f8f8; }
+  .time { font-size: 10px; color: #999; }
+  .empty { color: #ccc; }
+  @media print { body { margin: 10px; } }
+</style></head><body>
+  <h1>Orario Settimanale — Classe ${selectedClasse}</h1>
+  <h2>${materia ? materia + ' — ' : ''}Anno Scolastico ${annoAttivo}</h2>
+  ${content.innerHTML}
+  <script>window.print(); window.onafterprint = function() { window.close(); }<\/script>
+</body></html>`)
+    printWindow.document.close()
+  }
+
+  if (configLoading || loading) return <LoadingSpinner />
+
+  if (!annoAttivo) {
+    return (
+      <div className="text-center py-12">
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Export</h2>
+        <p className="text-gray-500">Configura l'anno scolastico nelle Impostazioni per iniziare.</p>
+      </div>
+    )
+  }
+
+  if (classi.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Export</h2>
+        <p className="text-gray-500">Aggiungi le classi nelle Impostazioni per poter esportare.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto">
+      {/* Header + class selector */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Export</h1>
+        <div className="flex gap-1">
+          {classi.map((c) => (
+            <button
+              key={c}
+              onClick={() => setSelectedClasse(c)}
+              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                selectedClasse === c
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-gray-200 mb-6">
+        {[
+          { id: 'iniziale', label: 'Programmazione Iniziale' },
+          { id: 'svolta', label: 'Programmazione Svolta' },
+          { id: 'orario', label: 'Orario Settimanale' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === tab.id
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Tab: Programmazione Iniziale ── */}
+      {activeTab === 'iniziale' && (
+        <div>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <p className="text-sm text-gray-500">
+              Testo strutturato dei percorsi pianificati, da copiare nei documenti scolastici.
+            </p>
+            <div className="flex gap-2 shrink-0">
+              <button
+                onClick={() => handleCopy(testoIniziale)}
+                disabled={!testoIniziale}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copia
+              </button>
+              <button
+                onClick={() => handleDownload(testoIniziale, `programmazione_iniziale_${selectedClasse}_${annoAttivo}.txt`)}
+                disabled={!testoIniziale}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Scarica .txt
+              </button>
+            </div>
+          </div>
+          {testoIniziale ? (
+            <pre className="bg-white border border-gray-200 rounded-lg p-4 text-sm text-gray-800 whitespace-pre-wrap font-mono leading-relaxed max-h-[600px] overflow-y-auto">
+              {testoIniziale}
+            </pre>
+          ) : (
+            <div className="p-8 bg-white rounded-lg border border-gray-200 text-center text-sm text-gray-400">
+              Nessun percorso definito per {selectedClasse}. Creane uno nella pagina Percorsi.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Programmazione Svolta ── */}
+      {activeTab === 'svolta' && (
+        <div>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <p className="text-sm text-gray-500">
+              Consuntivo di quanto effettivamente svolto, per i documenti di fine anno.
+            </p>
+            <div className="flex gap-2 shrink-0">
+              <button
+                onClick={() => handleCopy(testoSvolta)}
+                disabled={!testoSvolta}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copia
+              </button>
+              <button
+                onClick={() => handleDownload(testoSvolta, `programmazione_svolta_${selectedClasse}_${annoAttivo}.txt`)}
+                disabled={!testoSvolta}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Scarica .txt
+              </button>
+            </div>
+          </div>
+          {testoSvolta ? (
+            <pre className="bg-white border border-gray-200 rounded-lg p-4 text-sm text-gray-800 whitespace-pre-wrap font-mono leading-relaxed max-h-[600px] overflow-y-auto">
+              {testoSvolta}
+            </pre>
+          ) : (
+            <div className="p-8 bg-white rounded-lg border border-gray-200 text-center text-sm text-gray-400">
+              Nessun percorso definito per {selectedClasse}. Creane uno nella pagina Percorsi.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Orario Settimanale ── */}
+      {activeTab === 'orario' && (
+        <div>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <p className="text-sm text-gray-500">
+              Griglia orario settimanale da stampare o salvare come PDF.
+            </p>
+            <button
+              onClick={handlePrintOrario}
+              disabled={orarioRows.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Stampa / Salva PDF
+            </button>
+          </div>
+
+          <div ref={orarioPrintRef}>
+            {orarioRows.length > 0 ? (
+              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      <th className="border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 w-20">Ora</th>
+                      {allGiorni.map((g) => (
+                        <th key={g} className="border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600">
+                          {GIORNI_LABEL[g]}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orarioRows.map((row) => {
+                      const anySlot = allGiorni.map((g) => row[g]).find(Boolean)
+                      return (
+                        <tr key={row.ora}>
+                          <td className="border border-gray-200 px-3 py-3 text-center font-semibold text-blue-600 bg-gray-50">
+                            <div>{ORE_ROMAN[row.ora - 1] || row.ora}</div>
+                            {anySlot && (
+                              <div className="text-[10px] text-gray-400 font-normal mt-0.5">
+                                {anySlot.oraInizio}–{anySlot.oraFine}
+                              </div>
+                            )}
+                          </td>
+                          {allGiorni.map((g) => {
+                            const slot = row[g]
+                            return (
+                              <td key={g} className={`border border-gray-200 px-3 py-3 text-center ${slot ? 'text-gray-800' : 'text-gray-300'}`}>
+                                {slot ? <span className="font-medium">{slot.materia}</span> : '—'}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-8 bg-white rounded-lg border border-gray-200 text-center text-sm text-gray-400">
+                Nessun orario definito per {selectedClasse}. Configura l'orario nelle Impostazioni.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

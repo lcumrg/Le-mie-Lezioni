@@ -145,10 +145,10 @@ vacanze/{id}               → annoScolastico, nome, dataInizio, dataFine, tipo 
 - [ ] **Duplicazione percorsi tra classi**: assegnare lo stesso percorso a piu classi o duplicarlo con possibilita di personalizzare tempistiche diverse
 - [ ] **Separazione pagine Percorsi/Timeline**: valutare una pagina dedicata alla strutturazione dettagliata dei percorsi (contenuti, unita, descrizioni) separata dalla pagina di programmazione temporale (timeline distribuzione)
 
-### Fase 7 — Export e documenti
-- [ ] **Export testo formattato (programmazione iniziale)**: generare testo strutturato dei percorsi pianificati da copiare/incollare nei documenti scolastici per la programmazione annuale
-- [ ] **Export testo formattato (programmazione svolta)**: generare testo con il consuntivo di quanto effettivamente svolto per i documenti di fine anno
-- [ ] **Export PDF orario settimanale**: generare un PDF dell'orario griglia da stampare o condividere
+### Fase 7 — Export e documenti ✅
+- [x] **Export testo formattato (programmazione iniziale)**: testo strutturato dei percorsi pianificati con copia negli appunti e download .txt
+- [x] **Export testo formattato (programmazione svolta)**: consuntivo con ore previste vs effettuate, stato unita, percentuale completamento
+- [x] **Export PDF orario settimanale**: griglia orario stampabile con apertura finestra di stampa (salva come PDF dal browser)
 
 ### Fase 8 — UX e rifinitura
 - [ ] Migliorare responsive per mobile

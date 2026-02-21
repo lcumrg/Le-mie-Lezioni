@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
 import {
@@ -13,6 +13,7 @@ import {
   addVacanza,
   deleteVacanza,
 } from '../lib/firestore'
+import { parseExcel, importToFirestore } from '../lib/importExcel'
 import {
   GIORNI_LABEL,
   GIORNI_SHORT,
@@ -81,6 +82,11 @@ export default function ImpostazioniPage() {
     type: '',
     label: '',
   })
+
+  // --- Import Excel ---
+  const fileInputRef = useRef(null)
+  const [importPreview, setImportPreview] = useState(null)
+  const [importing, setImporting] = useState(false)
 
   // Load assegnazioni, orari, vacanze when annoAttivo changes
   useEffect(() => {
@@ -321,6 +327,43 @@ export default function ImpostazioniPage() {
 
   function handleCancelDelete() {
     setDeleteConfirm({ open: false, id: null, type: '', label: '' })
+  }
+
+  // ── Import Excel handlers ──
+
+  async function handleFileSelect(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const preview = await parseExcel(file)
+      setImportPreview({ ...preview, file })
+    } catch (err) {
+      toast.error('Errore nella lettura del file Excel: ' + err.message)
+    }
+    // Reset input so the same file can be re-selected
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  async function handleConfirmImport() {
+    if (!importPreview || !annoAttivo) return
+    setImporting(true)
+    try {
+      const oreConfig = annoConfig?.oreLezione || null
+      const summary = await importToFirestore(importPreview, annoAttivo, oreConfig)
+      const parts = []
+      if (summary.classi) parts.push(`${summary.classi} classi`)
+      if (summary.orario) parts.push(`${summary.orario} slot orario`)
+      if (summary.percorsi) parts.push(`${summary.percorsi} percorsi`)
+      if (summary.unita) parts.push(`${summary.unita} unita`)
+      if (summary.ricorrenze) parts.push(`${summary.ricorrenze} ricorrenze`)
+      if (summary.vacanze) parts.push(`${summary.vacanze} vacanze`)
+      toast.success(`Importazione completata: ${parts.join(', ')}`)
+      setImportPreview(null)
+    } catch (err) {
+      toast.error('Errore durante l\'importazione: ' + err.message)
+    } finally {
+      setImporting(false)
+    }
   }
 
   // Auto-fill materia when classe is selected in orario form
@@ -893,6 +936,107 @@ export default function ImpostazioniPage() {
               </p>
             )}
           </div>
+        </section>
+      )}
+
+      {/* ── 6. Import da Excel ── */}
+      {annoAttivo && (
+        <section className="bg-white rounded-lg border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Importa da Excel
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Importa classi, orario, percorsi, ricorrenze e vacanze da un file Excel.
+            I dati vengono <strong>aggiunti</strong> a quelli esistenti (non sostituiti).
+          </p>
+
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <a
+              href="/template-importazione.xlsx"
+              download
+              className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700"
+            >
+              Scarica template Excel
+            </a>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+            >
+              Seleziona file da importare
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+          </div>
+
+          {/* Preview */}
+          {importPreview && (
+            <div className="border border-blue-200 bg-blue-50 rounded-lg p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-blue-800">
+                Anteprima importazione
+              </h3>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
+                {importPreview.classi.length > 0 && (
+                  <div className="bg-white rounded px-3 py-2 border border-blue-200">
+                    <div className="text-lg font-bold text-blue-600">{importPreview.classi.length}</div>
+                    <div className="text-xs text-gray-500">Classi</div>
+                    <div className="text-[10px] text-gray-400 mt-1">
+                      {importPreview.classi.map((c) => c.classe).join(', ')}
+                    </div>
+                  </div>
+                )}
+                {importPreview.orario.length > 0 && (
+                  <div className="bg-white rounded px-3 py-2 border border-blue-200">
+                    <div className="text-lg font-bold text-blue-600">{importPreview.orario.length}</div>
+                    <div className="text-xs text-gray-500">Slot orario</div>
+                  </div>
+                )}
+                {importPreview.percorsi.length > 0 && (
+                  <div className="bg-white rounded px-3 py-2 border border-blue-200">
+                    <div className="text-lg font-bold text-purple-600">{importPreview.percorsi.length}</div>
+                    <div className="text-xs text-gray-500">Unita (percorsi)</div>
+                    <div className="text-[10px] text-gray-400 mt-1">
+                      {[...new Set(importPreview.percorsi.map((p) => p.percorso))].join(', ')}
+                    </div>
+                  </div>
+                )}
+                {importPreview.ricorrenze.length > 0 && (
+                  <div className="bg-white rounded px-3 py-2 border border-blue-200">
+                    <div className="text-lg font-bold text-teal-600">{importPreview.ricorrenze.length}</div>
+                    <div className="text-xs text-gray-500">Ricorrenze</div>
+                  </div>
+                )}
+                {importPreview.vacanze.length > 0 && (
+                  <div className="bg-white rounded px-3 py-2 border border-blue-200">
+                    <div className="text-lg font-bold text-orange-600">{importPreview.vacanze.length}</div>
+                    <div className="text-xs text-gray-500">Vacanze</div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  onClick={handleConfirmImport}
+                  disabled={importing}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {importing ? 'Importazione in corso...' : 'Conferma importazione'}
+                </button>
+                <button
+                  onClick={() => setImportPreview(null)}
+                  disabled={importing}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                >
+                  Annulla
+                </button>
+              </div>
+            </div>
+          )}
         </section>
       )}
 

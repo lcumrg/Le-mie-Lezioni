@@ -43,22 +43,22 @@ export default function ExportPage() {
     return () => unsubs.forEach((u) => u())
   }, [annoAttivo])
 
-  // Load unita for percorsi of selected class
-  const classePercorsi = useMemo(
-    () => allPercorsi.filter((p) => p.classe === selectedClasse),
-    [allPercorsi, selectedClasse]
-  )
-
+  // Load unita for ALL percorsi (needed for global orario export)
   useEffect(() => {
-    if (classePercorsi.length === 0) return
+    if (allPercorsi.length === 0) return
     const unsubs = []
-    for (const p of classePercorsi) {
+    for (const p of allPercorsi) {
       unsubs.push(onUnita(p.id, (units) => {
         setUnitaByPercorso((prev) => ({ ...prev, [p.id]: units }))
       }))
     }
     return () => unsubs.forEach((u) => u())
-  }, [classePercorsi.map((p) => p.id).join(',')])
+  }, [allPercorsi.map((p) => p.id).join(',')])
+
+  const classePercorsi = useMemo(
+    () => allPercorsi.filter((p) => p.classe === selectedClasse),
+    [allPercorsi, selectedClasse]
+  )
 
   const classi = useMemo(
     () => [...new Set(assegnazioni.map((a) => a.classe))].sort(),
@@ -192,67 +192,61 @@ export default function ExportPage() {
     return lines.join('\n')
   }, [selectedClasse, classePercorsi, unitaByPercorso, classeLezioni, materia, annoAttivo])
 
-  // ── Orario grid data ──
+  // ── Orario GLOBALE grid data ──
   const allGiorni = [0, 1, 2, 3, 4, 5].filter((g) => g !== giornoLibero)
 
-  const orarioRows = useMemo(() => {
-    const classeOrari = orari
-      .filter((o) => o.classe === selectedClasse && o.giorno !== giornoLibero)
-      .sort((a, b) => a.giorno - b.giorno || (a.numeroOra || 0) - (b.numeroOra || 0))
-    const maxOra = Math.max(0, ...classeOrari.map((o) => o.numeroOra || 0))
+  const globalOrarioRows = useMemo(() => {
+    const allOrari = orari.filter((o) => o.giorno !== giornoLibero)
+    const maxOra = Math.max(0, ...allOrari.map((o) => o.numeroOra || 0))
     const rows = []
     for (let ora = 1; ora <= maxOra; ora++) {
       const row = { ora }
       for (const g of allGiorni) {
-        row[g] = classeOrari.find((o) => o.giorno === g && o.numeroOra === ora) || null
+        // All slots for this (giorno, ora), sorted by classe
+        row[g] = allOrari
+          .filter((o) => o.giorno === g && o.numeroOra === ora)
+          .sort((a, b) => (a.classe || '').localeCompare(b.classe || ''))
       }
       rows.push(row)
     }
     return rows
-  }, [orari, selectedClasse, giornoLibero])
+  }, [orari, giornoLibero])
 
-  // ── Slot → Percorso/Unita lookup ──
+  // ── Slot → Percorso/Unita lookup (global, keyed by classe-giorno-ora) ──
   const slotContent = useMemo(() => {
-    const map = {} // key: "giorno-numeroOra" → { percorso, unita }
+    const map = {} // key: "classe-giorno-ora" → { percorso, unita }
     const now = new Date()
     now.setHours(0, 0, 0, 0)
 
-    for (const g of allGiorni) {
-      const maxOra = Math.max(0, ...orari.filter((o) => o.classe === selectedClasse && o.giorno === g).map((o) => o.numeroOra || 0))
-      for (let ora = 1; ora <= maxOra; ora++) {
-        const key = `${g}-${ora}`
-        // Find lezioni for this slot, sorted by date descending
-        const slotLezioni = classeLezioni
-          .filter((l) => l.giorno === g && l.numeroOra === ora && l.percorsoId)
-          .sort((a, b) => {
-            const da = a.data?.toDate ? a.data.toDate() : new Date(a.data)
-            const db = b.data?.toDate ? b.data.toDate() : new Date(b.data)
-            return db - da
-          })
+    for (const l of lezioni) {
+      if (!l.percorsoId || l.giorno == null || !l.numeroOra) continue
+      const key = `${l.classe}-${l.giorno}-${l.numeroOra}`
 
-        // Prefer next upcoming pianificata, otherwise most recent with percorsoId
-        const nextPianificata = slotLezioni.find((l) => {
-          const d = l.data?.toDate ? l.data.toDate() : new Date(l.data)
-          return d >= now && l.stato === STATO_LEZIONE.PIANIFICATA
-        })
-        const target = nextPianificata || slotLezioni[0]
+      const d = l.data?.toDate ? l.data.toDate() : new Date(l.data)
+      const existing = map[key]
 
-        if (target?.percorsoId) {
-          const percorso = allPercorsi.find((p) => p.id === target.percorsoId)
-          const unita = target.unitaId
-            ? (unitaByPercorso[target.percorsoId] || []).find((u) => u.id === target.unitaId)
+      // Prefer next upcoming pianificata, otherwise most recent
+      const isPianificataFutura = d >= now && l.stato === STATO_LEZIONE.PIANIFICATA
+      const existingIsFutura = existing?._isFutura
+
+      if (!existing || (isPianificataFutura && !existingIsFutura) ||
+          (isPianificataFutura === existingIsFutura && d > (existing._date || 0))) {
+        const percorso = allPercorsi.find((p) => p.id === l.percorsoId)
+        if (percorso) {
+          const unita = l.unitaId
+            ? (unitaByPercorso[l.percorsoId] || []).find((u) => u.id === l.unitaId)
             : null
-          if (percorso) {
-            map[key] = {
-              percorso: percorso.titolo,
-              unita: unita?.titolo || null,
-            }
+          map[key] = {
+            percorso: percorso.titolo,
+            unita: unita?.titolo || null,
+            _date: d,
+            _isFutura: isPianificataFutura,
           }
         }
       }
     }
     return map
-  }, [allGiorni, orari, classeLezioni, allPercorsi, unitaByPercorso, selectedClasse])
+  }, [lezioni, allPercorsi, unitaByPercorso])
 
   // ── Helpers ──
   async function handleCopy(text) {
@@ -285,23 +279,24 @@ export default function ExportPage() {
       return
     }
     printWindow.document.write(`<!DOCTYPE html>
-<html><head><title>Orario ${selectedClasse} - ${annoAttivo}</title>
+<html><head><title>Orario Settimanale - ${annoAttivo}</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 24px; }
   h1 { font-size: 18px; margin-bottom: 4px; }
   h2 { font-size: 14px; font-weight: normal; color: #666; margin-bottom: 16px; }
   table { border-collapse: collapse; width: 100%; }
-  th, td { border: 1px solid #333; padding: 8px 12px; text-align: center; font-size: 13px; }
+  th, td { border: 1px solid #333; padding: 6px 8px; text-align: center; font-size: 12px; vertical-align: top; }
   th { background: #f0f0f0; font-weight: 600; }
-  .ora { font-weight: 600; background: #f8f8f8; }
-  .time { font-size: 10px; color: #999; }
-  .empty { color: #ccc; }
-  .percorso { font-size: 10px; color: #2563eb; font-weight: 600; margin-top: 2px; }
+  .slot { margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px dotted #ddd; }
+  .slot:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+  .classe { font-weight: 700; font-size: 12px; }
+  .materia { font-size: 11px; color: #444; }
+  .percorso { font-size: 10px; color: #2563eb; font-weight: 600; margin-top: 1px; }
   .unita { font-size: 9px; color: #666; }
-  @media print { body { margin: 10px; } }
+  @media print { body { margin: 10px; } @page { size: landscape; } }
 </style></head><body>
-  <h1>Orario Settimanale — Classe ${selectedClasse}</h1>
-  <h2>${materia ? materia + ' — ' : ''}Anno Scolastico ${annoAttivo}</h2>
+  <h1>Orario Settimanale</h1>
+  <h2>Anno Scolastico ${annoAttivo}</h2>
   ${content.innerHTML}
   <script>window.print(); window.onafterprint = function() { window.close(); }<\/script>
 </body></html>`)
@@ -455,16 +450,16 @@ export default function ExportPage() {
         </div>
       )}
 
-      {/* ── Tab: Orario Settimanale ── */}
+      {/* ── Tab: Orario Settimanale (GLOBALE) ── */}
       {activeTab === 'orario' && (
         <div>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <p className="text-sm text-gray-500">
-              Griglia orario settimanale da stampare o salvare come PDF.
+              Orario settimanale completo di tutte le classi, con percorso e unita in corso.
             </p>
             <button
               onClick={handlePrintOrario}
-              disabled={orarioRows.length === 0}
+              disabled={globalOrarioRows.length === 0}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -475,25 +470,27 @@ export default function ExportPage() {
           </div>
 
           <div ref={orarioPrintRef}>
-            {orarioRows.length > 0 ? (
-              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            {globalOrarioRows.length > 0 ? (
+              <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50">
-                      <th className="border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 w-20">Ora</th>
+                      <th className="border border-gray-200 px-2 py-2 text-xs font-semibold text-gray-600 w-16">Ora</th>
                       {allGiorni.map((g) => (
-                        <th key={g} className="border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600">
+                        <th key={g} className="border border-gray-200 px-2 py-2 text-xs font-semibold text-gray-600">
                           {GIORNI_LABEL[g]}
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {orarioRows.map((row) => {
-                      const anySlot = allGiorni.map((g) => row[g]).find(Boolean)
+                    {globalOrarioRows.map((row) => {
+                      const anySlot = allGiorni.flatMap((g) => row[g]).find(Boolean)
+                      const hasAny = allGiorni.some((g) => row[g].length > 0)
+                      if (!hasAny) return null
                       return (
                         <tr key={row.ora}>
-                          <td className="border border-gray-200 px-3 py-3 text-center font-semibold text-blue-600 bg-gray-50">
+                          <td className="border border-gray-200 px-2 py-2 text-center font-semibold text-blue-600 bg-gray-50 align-top">
                             <div>{ORE_ROMAN[row.ora - 1] || row.ora}</div>
                             {anySlot && (
                               <div className="text-[10px] text-gray-400 font-normal mt-0.5">
@@ -502,21 +499,28 @@ export default function ExportPage() {
                             )}
                           </td>
                           {allGiorni.map((g) => {
-                            const slot = row[g]
-                            const info = slotContent[`${g}-${row.ora}`]
+                            const slots = row[g]
                             return (
-                              <td key={g} className={`border border-gray-200 px-2 py-2 text-center ${slot ? 'text-gray-800' : 'text-gray-300'}`}>
-                                {slot ? (
-                                  <div>
-                                    <div className="font-medium text-sm">{slot.materia}</div>
-                                    {info && (
-                                      <div className="mt-0.5">
-                                        <div className="text-[11px] text-blue-600 font-medium leading-tight">{info.percorso}</div>
-                                        {info.unita && (
-                                          <div className="text-[10px] text-gray-500 leading-tight">{info.unita}</div>
-                                        )}
-                                      </div>
-                                    )}
+                              <td key={g} className={`border border-gray-200 px-1.5 py-1.5 align-top ${slots.length > 0 ? 'text-gray-800' : 'text-gray-300 text-center'}`}>
+                                {slots.length > 0 ? (
+                                  <div className="space-y-1.5">
+                                    {slots.map((slot) => {
+                                      const info = slotContent[`${slot.classe}-${g}-${row.ora}`]
+                                      return (
+                                        <div key={slot.classe} className={`${slots.length > 1 ? 'pb-1.5 border-b border-dotted border-gray-200 last:border-b-0 last:pb-0' : ''}`}>
+                                          <div className="font-bold text-xs text-gray-900">{slot.classe}</div>
+                                          <div className="text-[11px] text-gray-600">{slot.materia}</div>
+                                          {info && (
+                                            <div className="mt-0.5">
+                                              <div className="text-[10px] text-blue-600 font-semibold leading-tight">{info.percorso}</div>
+                                              {info.unita && (
+                                                <div className="text-[9px] text-gray-500 leading-tight">{info.unita}</div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )
+                                    })}
                                   </div>
                                 ) : '—'}
                               </td>
@@ -530,7 +534,7 @@ export default function ExportPage() {
               </div>
             ) : (
               <div className="p-8 bg-white rounded-lg border border-gray-200 text-center text-sm text-gray-400">
-                Nessun orario definito per {selectedClasse}. Configura l'orario nelle Impostazioni.
+                Nessun orario definito. Configura l'orario nelle Impostazioni.
               </div>
             )}
           </div>

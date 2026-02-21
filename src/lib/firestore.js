@@ -190,7 +190,13 @@ export function onDistribuzioni(callback) {
 }
 
 export async function setDistribuzioniClasse(classe, settimane) {
-  return setDoc(doc(db, 'config', 'distribuzioni'), { [classe]: settimane }, { merge: true })
+  const ref = doc(db, 'config', 'distribuzioni')
+  try {
+    await updateDoc(ref, { [classe]: settimane })
+  } catch {
+    // Document doesn't exist yet, create it
+    await setDoc(ref, { [classe]: settimane })
+  }
 }
 
 export function onLezioniByPercorso(percorsoId, callback) {

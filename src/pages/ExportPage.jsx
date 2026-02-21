@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
-import { STATO_UNITA_LABEL, STATO_LEZIONE, GIORNI_LABEL, ORE_ROMAN } from '../lib/costanti'
+import { STATO_UNITA, STATO_UNITA_LABEL, STATO_LEZIONE, GIORNI_LABEL, ORE_ROMAN } from '../lib/costanti'
 import {
   onAssegnazioni,
   onOrari,
@@ -212,12 +212,34 @@ export default function ExportPage() {
     return rows
   }, [orari, giornoLibero])
 
+  // ── Fallback per classe: percorso + unita "in corso" (o prima "da fare") ──
+  const classeFallback = useMemo(() => {
+    const map = {} // key: classe → { percorso, unita }
+    for (const p of allPercorsi) {
+      if (map[p.classe]) continue // usa il primo percorso trovato per classe
+      const units = (unitaByPercorso[p.id] || [])
+        .slice()
+        .sort((a, b) => (a.ordine || 0) - (b.ordine || 0))
+      // Cerca prima un'unita "in_corso", poi la prima "da_fare"
+      const inCorso = units.find((u) => u.stato === STATO_UNITA.IN_CORSO)
+      const daFare = units.find((u) => u.stato === STATO_UNITA.DA_FARE)
+      const unitaAttiva = inCorso || daFare
+      map[p.classe] = {
+        percorso: p.titolo,
+        unita: unitaAttiva?.titolo || null,
+      }
+    }
+    return map
+  }, [allPercorsi, unitaByPercorso])
+
   // ── Slot → Percorso/Unita lookup (global, keyed by classe-giorno-ora) ──
+  // Se una lezione ha percorsoId esplicito usa quello, altrimenti fallback della classe
   const slotContent = useMemo(() => {
     const map = {} // key: "classe-giorno-ora" → { percorso, unita }
     const now = new Date()
     now.setHours(0, 0, 0, 0)
 
+    // 1) Popola da lezioni con percorsoId esplicito
     for (const l of lezioni) {
       if (!l.percorsoId || l.giorno == null || !l.numeroOra) continue
       const key = `${l.classe}-${l.giorno}-${l.numeroOra}`
@@ -225,7 +247,6 @@ export default function ExportPage() {
       const d = l.data?.toDate ? l.data.toDate() : new Date(l.data)
       const existing = map[key]
 
-      // Prefer next upcoming pianificata, otherwise most recent
       const isPianificataFutura = d >= now && l.stato === STATO_LEZIONE.PIANIFICATA
       const existingIsFutura = existing?._isFutura
 
@@ -241,12 +262,18 @@ export default function ExportPage() {
             unita: unita?.titolo || null,
             _date: d,
             _isFutura: isPianificataFutura,
+            _explicit: true,
           }
         }
       }
     }
     return map
   }, [lezioni, allPercorsi, unitaByPercorso])
+
+  // Funzione per ottenere info slot (esplicita o fallback)
+  function getSlotInfo(classe, giorno, ora) {
+    return slotContent[`${classe}-${giorno}-${ora}`] || classeFallback[classe] || null
+  }
 
   // ── Helpers ──
   async function handleCopy(text) {
@@ -505,7 +532,7 @@ export default function ExportPage() {
                                 {slots.length > 0 ? (
                                   <div className="space-y-1.5">
                                     {slots.map((slot) => {
-                                      const info = slotContent[`${slot.classe}-${g}-${row.ora}`]
+                                      const info = getSlotInfo(slot.classe, g, row.ora)
                                       return (
                                         <div key={slot.classe} className={`${slots.length > 1 ? 'pb-1.5 border-b border-dotted border-gray-200 last:border-b-0 last:pb-0' : ''}`}>
                                           <div className="font-bold text-xs text-gray-900">{slot.classe}</div>

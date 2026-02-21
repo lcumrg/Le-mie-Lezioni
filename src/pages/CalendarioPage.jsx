@@ -9,6 +9,7 @@ import {
   addLezione,
   updateLezione,
   deleteLezione,
+  onRicorrenze,
 } from '../lib/firestore'
 import {
   STATO_LEZIONE,
@@ -58,6 +59,7 @@ export default function CalendarioPage() {
     note: '',
   })
   const [submittingExtra, setSubmittingExtra] = useState(false)
+  const [ricorrenze, setRicorrenzeState] = useState({})
 
   const { start, end } = getWeekRange(weekOffset)
 
@@ -75,8 +77,9 @@ export default function CalendarioPage() {
     const unsub2 = onOrari(annoAttivo, setOrari)
     const unsub3 = onAssegnazioni(annoAttivo, setAssegnazioni)
     const unsub4 = onPercorsi(annoAttivo, setPercorsi)
+    const unsub5 = onRicorrenze(setRicorrenzeState)
 
-    return () => { unsub1(); unsub2(); unsub3(); unsub4() }
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5() }
   }, [annoAttivo, weekOffset])
 
   // Build day structure
@@ -140,6 +143,11 @@ export default function CalendarioPage() {
         const key = `${dayStr}_${slot.oraInizio}_${slot.classe}`
         if (existingKeys.has(key)) continue
 
+        // Check if there's a ricorrenza for this class + giorno + ora
+        const classeRic = ricorrenze[slot.classe] || {}
+        const ricKey = `${i}-${slot.numeroOra || 0}`
+        const ric = classeRic[ricKey]
+
         promises.push(
           addLezione({
             annoScolastico: annoAttivo,
@@ -154,6 +162,7 @@ export default function CalendarioPage() {
             stato: STATO_LEZIONE.PIANIFICATA,
             note: '',
             titoloOverride: '',
+            ...(ric?.percorsoId ? { percorsoId: ric.percorsoId } : {}),
           })
         )
       }

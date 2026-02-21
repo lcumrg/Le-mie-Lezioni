@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
-import { STATO_UNITA } from '../lib/costanti'
+import { STATO_UNITA, GIORNI_SHORT } from '../lib/costanti'
 import {
   onAssegnazioni,
   onOrari,
@@ -11,6 +11,8 @@ import {
   onVacanze,
   onDistribuzioni,
   setDistribuzioniClasse,
+  onRicorrenze,
+  setRicorrenzeClasse,
 } from '../lib/firestore'
 import {
   format,
@@ -50,6 +52,7 @@ export default function ProgrammazionePage() {
   const [unitaByPercorso, setUnitaByPercorso] = useState({})
   const [vacanze, setVacanze] = useState([])
   const [distribuzioni, setDistribuzioni] = useState({})
+  const [ricorrenze, setRicorrenze] = useState({})
   const [selectedClasse, setSelectedClasse] = useState(null)
   const [loading, setLoading] = useState(true)
   const [distributing, setDistributing] = useState(false)
@@ -72,6 +75,7 @@ export default function ProgrammazionePage() {
     unsubs.push(onPercorsi(annoAttivo, (all) => setAllPercorsi(all)))
     unsubs.push(onVacanze(annoAttivo, setVacanze))
     unsubs.push(onDistribuzioni(setDistribuzioni))
+    unsubs.push(onRicorrenze(setRicorrenze))
     return () => unsubs.forEach((u) => u())
   }, [annoAttivo])
 
@@ -201,36 +205,190 @@ export default function ProgrammazionePage() {
   // Current distribution for selected class
   const classeDistribuzioni = distribuzioni[selectedClasse] || {}
 
+  // Current ricorrenze for selected class
+  const classeRicorrenze = ricorrenze[selectedClasse] || {}
+
+  // Build orario grid for selected class: array of { giorno, numeroOra, oraInizio, oraFine }
+  const classeOrarioSlots = useMemo(() => {
+    if (!selectedClasse) return []
+    return orari
+      .filter((o) => o.classe === selectedClasse && o.giorno !== giornoLibero)
+      .sort((a, b) => a.giorno - b.giorno || (a.numeroOra || 0) - (b.numeroOra || 0))
+  }, [selectedClasse, orari, giornoLibero])
+
+  // Unique giorni that have slots for this class
+  const giorniConOre = useMemo(() => {
+    const set = new Set(classeOrarioSlots.map((s) => s.giorno))
+    return [...set].sort()
+  }, [classeOrarioSlots])
+
+  // Unique ore (numeroOra) across all giorni for this class
+  const oreUniche = useMemo(() => {
+    const set = new Set(classeOrarioSlots.map((s) => s.numeroOra || 0))
+    return [...set].sort((a, b) => a - b)
+  }, [classeOrarioSlots])
+
+  // Summary: ore per percorso per settimana from ricorrenze
+  const orePerPercorsoSettimanali = useMemo(() => {
+    const map = {} // percorsoId -> { titolo, oreSettimanali }
+    for (const key of Object.keys(classeRicorrenze)) {
+      const ric = classeRicorrenze[key]
+      if (!ric?.percorsoId) continue
+      if (!map[ric.percorsoId]) {
+        map[ric.percorsoId] = { titolo: ric.percorsoTitolo, oreSettimanali: 0 }
+      }
+      map[ric.percorsoId].oreSettimanali++
+    }
+    return map
+  }, [classeRicorrenze])
+
+  // Handle ricorrenza change for a slot
+  async function handleRicorrenzaChange(giorno, numeroOra, percorsoId) {
+    const key = `${giorno}-${numeroOra || 0}`
+    const newRic = { ...classeRicorrenze }
+
+    if (!percorsoId) {
+      delete newRic[key]
+    } else {
+      const percorso = classePercorsi.find((p) => p.id === percorsoId)
+      if (percorso) {
+        newRic[key] = {
+          percorsoId: percorso.id,
+          percorsoTitolo: percorso.titolo,
+        }
+      }
+    }
+
+    try {
+      await setRicorrenzeClasse(selectedClasse, newRic)
+    } catch (err) {
+      toast.error('Errore durante il salvataggio della ricorrenza.')
+    }
+  }
+
   // ── Auto-distribute ──
   async function handleAutoDistribute() {
     if (!selectedClasse || allUnita.length === 0 || weeks.length === 0) return
     setDistributing(true)
 
     try {
-      const newDist = {}
-      let unitaIndex = 0
-      let oreAccumulate = 0
+      const hasRicorrenze = Object.keys(classeRicorrenze).length > 0
 
-      for (const week of weeks) {
-        if (week.oreDisponibili === 0) continue
-        if (unitaIndex >= allUnita.length) break
+      if (hasRicorrenze) {
+        // ── Smart distribution using ricorrenze ──
+        // Each percorso gets its units distributed based on weekly recurring hours
+        const newDist = {}
 
-        const unita = allUnita[unitaIndex]
-        newDist[week.startStr] = {
-          percorsoId: unita.percorsoId,
-          unitaId: unita.id,
-          percorsoTitolo: unita.percorsoTitolo,
-          unitaTitolo: unita.titolo,
+        // Group unita by percorso
+        const unitaPerPercorso = {}
+        for (const u of allUnita) {
+          if (!unitaPerPercorso[u.percorsoId]) unitaPerPercorso[u.percorsoId] = []
+          unitaPerPercorso[u.percorsoId].push(u)
         }
 
-        oreAccumulate += week.oreDisponibili
-        if (oreAccumulate >= (unita.orePreviste || 1)) {
-          unitaIndex++
-          oreAccumulate = 0
+        // Track progress per percorso
+        const progressPerPercorso = {} // percorsoId -> { unitaIndex, oreAccumulate }
+        for (const pId of Object.keys(unitaPerPercorso)) {
+          progressPerPercorso[pId] = { unitaIndex: 0, oreAccumulate: 0 }
         }
+
+        // For each week, determine how many hours each percorso gets
+        // based on which days of the week are available (not vacation)
+        for (const week of weeks) {
+          if (week.oreDisponibili === 0) continue
+
+          // Count per-percorso hours for this specific week
+          // by checking which day slots are actually available (not vacation)
+          const orePercorsoThisWeek = {} // percorsoId -> hours
+
+          for (let d = 0; d < 6; d++) {
+            if (d === giornoLibero) continue
+
+            const day = addDays(week.start, d)
+            // Check if this day is vacation
+            const isVacDay = vacanze.some((v) => {
+              const vStart = parseISO(v.dataInizio)
+              const vEnd = parseISO(v.dataFine)
+              return !isBefore(day, vStart) && !isAfter(day, vEnd)
+            })
+            if (isVacDay) continue
+
+            // Find all orario slots for this day
+            const daySlots = classeOrarioSlots.filter((s) => s.giorno === d)
+            for (const slot of daySlots) {
+              const key = `${d}-${slot.numeroOra || 0}`
+              const ric = classeRicorrenze[key]
+              if (ric?.percorsoId) {
+                orePercorsoThisWeek[ric.percorsoId] = (orePercorsoThisWeek[ric.percorsoId] || 0) + 1
+              }
+            }
+          }
+
+          // For each percorso that has hours this week, advance its unit distribution
+          // A week can have multiple percorsi — store the one with the most hours as the main assignment,
+          // but we track all percorso progress
+          let mainAssignment = null
+          let maxOre = 0
+
+          for (const [pId, ore] of Object.entries(orePercorsoThisWeek)) {
+            const prog = progressPerPercorso[pId]
+            const units = unitaPerPercorso[pId]
+            if (!prog || !units || prog.unitaIndex >= units.length) continue
+
+            const currentUnit = units[prog.unitaIndex]
+            prog.oreAccumulate += ore
+
+            // Store assignment for the percorso with most hours this week
+            if (ore > maxOre) {
+              maxOre = ore
+              mainAssignment = {
+                percorsoId: currentUnit.percorsoId,
+                unitaId: currentUnit.id,
+                percorsoTitolo: currentUnit.percorsoTitolo,
+                unitaTitolo: currentUnit.titolo,
+              }
+            }
+
+            // Move to next unit if enough hours accumulated
+            if (prog.oreAccumulate >= (currentUnit.orePreviste || 1)) {
+              prog.unitaIndex++
+              prog.oreAccumulate = 0
+            }
+          }
+
+          if (mainAssignment) {
+            newDist[week.startStr] = mainAssignment
+          }
+        }
+
+        await setDistribuzioniClasse(selectedClasse, newDist)
+      } else {
+        // ── Simple sequential distribution (original algorithm) ──
+        const newDist = {}
+        let unitaIndex = 0
+        let oreAccumulate = 0
+
+        for (const week of weeks) {
+          if (week.oreDisponibili === 0) continue
+          if (unitaIndex >= allUnita.length) break
+
+          const unita = allUnita[unitaIndex]
+          newDist[week.startStr] = {
+            percorsoId: unita.percorsoId,
+            unitaId: unita.id,
+            percorsoTitolo: unita.percorsoTitolo,
+            unitaTitolo: unita.titolo,
+          }
+
+          oreAccumulate += week.oreDisponibili
+          if (oreAccumulate >= (unita.orePreviste || 1)) {
+            unitaIndex++
+            oreAccumulate = 0
+          }
+        }
+
+        await setDistribuzioniClasse(selectedClasse, newDist)
       }
-
-      await setDistribuzioniClasse(selectedClasse, newDist)
     } catch (err) {
       toast.error('Errore durante la distribuzione automatica.')
     } finally {
@@ -345,6 +503,83 @@ export default function ProgrammazionePage() {
           <p className="text-sm text-amber-700">
             Imposta l'<strong>ultimo giorno di scuola</strong> e le <strong>ore scolastiche</strong> nelle Impostazioni per vedere la timeline e il bilancio ore.
           </p>
+        </div>
+      )}
+
+      {/* ── Ricorrenze grid (slot → percorso) ── */}
+      {selectedClasse && classeOrarioSlots.length > 0 && classePercorsi.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold text-gray-900">Ore ricorrenti</h2>
+            <span className="text-xs text-gray-400">Assegna un percorso fisso a ogni slot orario</span>
+          </div>
+
+          <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 w-16">Ora</th>
+                  {giorniConOre.map((g) => (
+                    <th key={g} className="px-2 py-2 text-center text-xs font-medium text-gray-500">
+                      {GIORNI_SHORT[g]}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {oreUniche.map((ora) => (
+                  <tr key={ora} className="border-b border-gray-100 last:border-b-0">
+                    <td className="px-3 py-2 text-xs font-medium text-gray-500">{ora}ª</td>
+                    {giorniConOre.map((giorno) => {
+                      const slot = classeOrarioSlots.find(
+                        (s) => s.giorno === giorno && (s.numeroOra || 0) === ora
+                      )
+                      if (!slot) {
+                        return <td key={giorno} className="px-2 py-2 text-center text-gray-200">—</td>
+                      }
+
+                      const key = `${giorno}-${ora}`
+                      const ric = classeRicorrenze[key]
+                      const color = ric ? percorsoColorMap[ric.percorsoId] : null
+
+                      return (
+                        <td key={giorno} className="px-1 py-1">
+                          <select
+                            value={ric?.percorsoId || ''}
+                            onChange={(e) => handleRicorrenzaChange(giorno, ora, e.target.value || null)}
+                            className={`w-full px-1.5 py-1 rounded text-xs border outline-none cursor-pointer ${
+                              ric
+                                ? `${color?.bg || 'bg-gray-100'} ${color?.border || 'border-gray-300'} ${color?.text || 'text-gray-700'} font-medium`
+                                : 'border-gray-200 text-gray-400'
+                            }`}
+                          >
+                            <option value="">—</option>
+                            {classePercorsi.map((p) => (
+                              <option key={p.id} value={p.id}>{p.titolo}</option>
+                            ))}
+                          </select>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Riepilogo ore settimanali per percorso */}
+          {Object.keys(orePerPercorsoSettimanali).length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {Object.entries(orePerPercorsoSettimanali).map(([pId, info]) => {
+                const color = percorsoColorMap[pId] || PERCORSO_COLORS[0]
+                return (
+                  <span key={pId} className={`text-xs px-2 py-1 rounded-full ${color.bg} ${color.text} font-medium`}>
+                    {info.titolo}: {info.oreSettimanali}h/sett
+                  </span>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 

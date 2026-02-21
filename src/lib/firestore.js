@@ -199,6 +199,24 @@ export async function setDistribuzioniClasse(classe, settimane) {
   }
 }
 
+// ── Ricorrenze (slot giorno/ora → percorso per classe) ──
+
+export function onRicorrenze(callback) {
+  return onSnapshot(doc(db, 'config', 'ricorrenze'), (snap) => {
+    callback(snap.exists() ? snap.data() : {})
+  })
+}
+
+export async function setRicorrenzeClasse(classe, ricorrenze) {
+  const ref = doc(db, 'config', 'ricorrenze')
+  try {
+    await updateDoc(ref, { [classe]: ricorrenze })
+  } catch {
+    // Document doesn't exist yet, create it
+    await setDoc(ref, { [classe]: ricorrenze })
+  }
+}
+
 export function onLezioniByPercorso(percorsoId, callback) {
   const q = query(lezioniRef, where('percorsoId', '==', percorsoId))
   return onSnapshot(q, (snap) => {

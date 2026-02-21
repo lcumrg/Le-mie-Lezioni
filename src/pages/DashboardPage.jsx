@@ -337,6 +337,142 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* ── Vista Oggi ── */}
+      {weekOffset === 0 && (() => {
+        const lezioniOggi = lezioni
+          .filter((lez) => {
+            const data = lez.data instanceof Date
+              ? lez.data
+              : lez.data?.toDate
+                ? lez.data.toDate()
+                : new Date(lez.data)
+            return isToday(data)
+          })
+          .sort((a, b) => (a.oraInizio || '').localeCompare(b.oraInizio || ''))
+        const totale = lezioniOggi.length
+        const svolte = lezioniOggi.filter((l) => l.stato === STATO_LEZIONE.SVOLTA).length
+        const daFare = lezioniOggi.filter((l) => l.stato === STATO_LEZIONE.PIANIFICATA).length
+
+        return (
+          <div className="mb-6 rounded-xl border-2 border-blue-300 bg-gradient-to-br from-blue-50 to-blue-100/60 shadow-sm overflow-hidden">
+            {/* Header */}
+            <div className="px-5 py-3 bg-blue-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <h2 className="text-lg font-bold">
+                  Vista Oggi &mdash; {format(new Date(), 'EEEE d MMMM', { locale: it })}
+                </h2>
+              </div>
+              {totale > 0 && (
+                <span className="text-sm bg-blue-500/50 backdrop-blur px-3 py-1 rounded-full font-medium">
+                  {totale} lezioni oggi, {svolte} svolte, {daFare} da fare
+                </span>
+              )}
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-4">
+              {totale === 0 ? (
+                <div className="text-center py-6">
+                  <svg className="w-10 h-10 mx-auto text-blue-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+                  </svg>
+                  <p className="text-blue-600 font-medium text-base">Nessuna lezione oggi</p>
+                  <p className="text-blue-400 text-sm mt-1">Buon riposo!</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {lezioniOggi.map((lez) => {
+                    const percorso = lez.percorsoId ? percorsoMap[lez.percorsoId] : null
+                    const unita = lez.unitaId ? unitaMap[lez.unitaId] : null
+
+                    return (
+                      <div
+                        key={lez.id}
+                        className={`flex items-start gap-4 p-3.5 rounded-lg border bg-white/80 backdrop-blur-sm transition-all ${
+                          lez.stato === STATO_LEZIONE.SVOLTA
+                            ? 'border-green-300 bg-green-50/50'
+                            : lez.stato === STATO_LEZIONE.SALTATA
+                              ? 'border-red-300 bg-red-50/50'
+                              : 'border-blue-200'
+                        }`}
+                      >
+                        {/* Time */}
+                        <div className="shrink-0 text-center min-w-[4.5rem]">
+                          <div className="text-sm font-bold text-blue-700">{lez.oraInizio || '--:--'}</div>
+                          <div className="text-xs text-blue-400">{lez.oraFine || ''}</div>
+                        </div>
+
+                        {/* Divider */}
+                        <div className={`w-0.5 self-stretch rounded-full shrink-0 ${
+                          lez.stato === STATO_LEZIONE.SVOLTA
+                            ? 'bg-green-400'
+                            : lez.stato === STATO_LEZIONE.SALTATA
+                              ? 'bg-red-400'
+                              : 'bg-blue-400'
+                        }`} />
+
+                        {/* Content */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-base font-bold text-gray-900">{lez.classe}</span>
+                            <span className="text-sm text-gray-500">&mdash;</span>
+                            <span className="text-sm font-medium text-gray-700">{lez.titoloOverride || lez.materia}</span>
+                          </div>
+                          {percorso && (
+                            <div className="flex items-center gap-1.5 mt-1 px-2 py-1 bg-purple-50 border border-purple-200 rounded-md w-fit max-w-full">
+                              <svg className="w-3.5 h-3.5 text-purple-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                              </svg>
+                              <span className="text-sm font-semibold text-purple-700 truncate">{percorso.titolo}</span>
+                              {unita && (
+                                <>
+                                  <span className="text-purple-300">/</span>
+                                  <span className="text-sm text-purple-600 truncate">{unita.titolo}</span>
+                                </>
+                              )}
+                            </div>
+                          )}
+                          {lez.note && (
+                            <p className="text-xs text-gray-500 mt-1.5 italic leading-relaxed">
+                              {lez.note}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Status buttons */}
+                        <div className="flex gap-1 shrink-0 self-center">
+                          {STATI_LEZIONE.map((s) => (
+                            <button
+                              key={s}
+                              onClick={() => handleStatoChange(lez.id, s)}
+                              className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all ${
+                                lez.stato === s
+                                  ? `${STATO_BADGE[s]} ring-2 ring-offset-1 ${
+                                      s === STATO_LEZIONE.PIANIFICATA ? 'ring-blue-300' :
+                                      s === STATO_LEZIONE.SVOLTA ? 'ring-green-300' :
+                                      'ring-red-300'
+                                    }`
+                                  : 'bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600'
+                              }`}
+                              title={STATO_LEZIONE_LABEL[s]}
+                            >
+                              {STATO_LEZIONE_SHORT[s]}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* ── Timetable Grid ── */}
       {hasOreConfig ? (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">

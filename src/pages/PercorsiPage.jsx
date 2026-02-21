@@ -7,6 +7,8 @@ import {
   updatePercorso,
   deletePercorso,
   onAssegnazioni,
+  getUnita,
+  addUnita,
 } from '../lib/firestore'
 import UnitaPanel from '../components/percorsi/UnitaPanel'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -23,12 +25,25 @@ export default function PercorsiPage() {
   const [expandedId, setExpandedId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
+  // Note inline editing state
+  const [editingNoteText, setEditingNoteText] = useState('')
+  const [editingNoteId, setEditingNoteId] = useState(null)
+
+  // Expanded note display (collapsed by default in header)
+  const [noteExpandedIds, setNoteExpandedIds] = useState(new Set())
+
+  // Duplicate feature state
+  const [duplicatingId, setDuplicatingId] = useState(null)
+  const [duplicateClasse, setDuplicateClasse] = useState('')
+  const [duplicating, setDuplicating] = useState(false)
+
   // Form
   const [form, setForm] = useState({
     titolo: '',
     classe: '',
     materia: '',
     descrizione: '',
+    note: '',
   })
 
   useEffect(() => {
@@ -47,7 +62,7 @@ export default function PercorsiPage() {
   }, [annoAttivo])
 
   function resetForm() {
-    setForm({ titolo: '', classe: '', materia: '', descrizione: '' })
+    setForm({ titolo: '', classe: '', materia: '', descrizione: '', note: '' })
     setShowForm(false)
     setEditingId(null)
   }
@@ -76,6 +91,7 @@ export default function PercorsiPage() {
           classe: form.classe,
           materia: form.materia.trim(),
           descrizione: form.descrizione.trim(),
+          note: form.note.trim(),
         })
       } else {
         await addPercorso({
@@ -84,6 +100,7 @@ export default function PercorsiPage() {
           classe: form.classe,
           materia: form.materia.trim(),
           descrizione: form.descrizione.trim(),
+          note: form.note.trim(),
         })
       }
       resetForm()
@@ -98,6 +115,7 @@ export default function PercorsiPage() {
       classe: p.classe,
       materia: p.materia || '',
       descrizione: p.descrizione || '',
+      note: p.note || '',
     })
     setEditingId(p.id)
     setShowForm(true)
@@ -112,6 +130,84 @@ export default function PercorsiPage() {
       toast.error('Errore durante l\'eliminazione del percorso.')
     }
     setDeleteConfirm(null)
+  }
+
+  // Toggle note expanded in header
+  function toggleNoteExpanded(id, e) {
+    e.stopPropagation()
+    setNoteExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  // Inline note editing: start
+  function startNoteEdit(p) {
+    setEditingNoteId(p.id)
+    setEditingNoteText(p.note || '')
+  }
+
+  // Inline note editing: save on blur
+  async function saveNote(percorsoId) {
+    const trimmed = editingNoteText.trim()
+    const current = percorsi.find((p) => p.id === percorsoId)
+    const currentNote = (current?.note || '').trim()
+    if (trimmed !== currentNote) {
+      try {
+        await updatePercorso(percorsoId, { note: trimmed })
+      } catch (err) {
+        toast.error('Errore durante il salvataggio delle note.')
+      }
+    }
+    setEditingNoteId(null)
+  }
+
+  // Duplicate percorso to another class
+  async function handleDuplicate(percorso) {
+    if (!duplicateClasse) {
+      toast.error('Seleziona una classe di destinazione.')
+      return
+    }
+    if (duplicateClasse === percorso.classe) {
+      toast.error('Seleziona una classe diversa da quella attuale.')
+      return
+    }
+
+    setDuplicating(true)
+    try {
+      // Clone the percorso
+      const newPercorsoRef = await addPercorso({
+        annoScolastico: annoAttivo,
+        titolo: percorso.titolo,
+        classe: duplicateClasse,
+        materia: percorso.materia || '',
+        descrizione: percorso.descrizione || '',
+        note: percorso.note || '',
+      })
+
+      // Clone all unita from the original percorso
+      const unitaList = await getUnita(percorso.id)
+      for (const u of unitaList) {
+        await addUnita(newPercorsoRef.id, {
+          titolo: u.titolo,
+          descrizione: u.descrizione || '',
+          ordine: u.ordine,
+          orePreviste: u.orePreviste || 0,
+          stato: u.stato || 'da_fare',
+          materiali: u.materiali || [],
+        })
+      }
+
+      toast.success(`Percorso duplicato in ${duplicateClasse}.`)
+      setDuplicatingId(null)
+      setDuplicateClasse('')
+    } catch (err) {
+      toast.error('Errore durante la duplicazione del percorso.')
+    } finally {
+      setDuplicating(false)
+    }
   }
 
   if (configLoading || loading) return <LoadingSpinner />
@@ -212,6 +308,18 @@ export default function PercorsiPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
               />
             </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Note (opzionale)
+              </label>
+              <textarea
+                value={form.note}
+                onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
+                rows={2}
+                placeholder="Annotazioni, appunti, promemoria..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+              />
+            </div>
             <div className="flex items-center gap-2">
               <button
                 type="submit"
@@ -277,9 +385,48 @@ export default function PercorsiPage() {
                       {p.descrizione && (
                         <p className="text-xs text-gray-500 truncate">{p.descrizione}</p>
                       )}
+                      {/* Collapsed note indicator in header */}
+                      {p.note && (
+                        <button
+                          onClick={(e) => toggleNoteExpanded(p.id, e)}
+                          className="mt-1 inline-flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          {noteExpandedIds.has(p.id) ? 'Nascondi note' : 'Mostra note'}
+                        </button>
+                      )}
+                      {p.note && noteExpandedIds.has(p.id) && (
+                        <p
+                          className="mt-1 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 whitespace-pre-wrap"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {p.note}
+                        </p>
+                      )}
                     </div>
 
                     {/* Actions */}
+                    {/* Duplicate button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (duplicatingId === p.id) {
+                          setDuplicatingId(null)
+                          setDuplicateClasse('')
+                        } else {
+                          setDuplicatingId(p.id)
+                          setDuplicateClasse('')
+                        }
+                      }}
+                      className="text-gray-400 hover:text-blue-600"
+                      title="Duplica in altra classe"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); startEdit(p) }}
                       className="text-gray-400 hover:text-gray-600"
@@ -298,9 +445,76 @@ export default function PercorsiPage() {
                     </button>
                   </div>
 
-                  {/* Expanded: units */}
+                  {/* Duplicate inline form */}
+                  {duplicatingId === p.id && (
+                    <div
+                      className="px-4 py-3 bg-blue-50 border-t border-blue-200 flex items-center gap-3 flex-wrap"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="text-xs font-medium text-blue-800">Duplica in:</span>
+                      <select
+                        value={duplicateClasse}
+                        onChange={(e) => setDuplicateClasse(e.target.value)}
+                        className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      >
+                        <option value="">Seleziona classe</option>
+                        {classiDisponibili
+                          .filter((c) => c !== p.classe)
+                          .map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                      </select>
+                      <button
+                        onClick={() => handleDuplicate(p)}
+                        disabled={!duplicateClasse || duplicating}
+                        className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {duplicating ? 'Duplicazione...' : 'Conferma'}
+                      </button>
+                      <button
+                        onClick={() => { setDuplicatingId(null); setDuplicateClasse('') }}
+                        className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded hover:bg-gray-200"
+                      >
+                        Annulla
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Expanded: inline note editor + units */}
                   {expandedId === p.id && (
                     <div className="px-4 pb-4 pt-2 border-t border-gray-100">
+                      {/* Inline note editor */}
+                      <div className="mb-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-medium text-gray-600">Note</label>
+                          {editingNoteId !== p.id && (
+                            <button
+                              onClick={() => startNoteEdit(p)}
+                              className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                            >
+                              {p.note ? 'Modifica note' : 'Aggiungi note'}
+                            </button>
+                          )}
+                        </div>
+                        {editingNoteId === p.id ? (
+                          <textarea
+                            value={editingNoteText}
+                            onChange={(e) => setEditingNoteText(e.target.value)}
+                            onBlur={() => saveNote(p.id)}
+                            rows={3}
+                            placeholder="Annotazioni, appunti, promemoria..."
+                            className="w-full px-3 py-2 border border-amber-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none resize-none bg-amber-50"
+                            autoFocus
+                          />
+                        ) : p.note ? (
+                          <p
+                            className="text-xs text-amber-700 bg-amber-50 rounded px-3 py-2 whitespace-pre-wrap cursor-pointer hover:bg-amber-100"
+                            onClick={() => startNoteEdit(p)}
+                          >
+                            {p.note}
+                          </p>
+                        ) : null}
+                      </div>
                       <UnitaPanel percorso={p} />
                     </div>
                   )}

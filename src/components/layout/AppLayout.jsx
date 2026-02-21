@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
+import GlobalSearch from '../common/GlobalSearch'
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -23,8 +24,13 @@ export default function AppLayout() {
           <h1 className="text-lg font-bold text-gray-900">Le Mie Lezioni</h1>
         </header>
 
+        {/* Global search */}
+        <div className="sticky top-0 z-10 bg-gray-50 px-4 pt-4 pb-2 md:px-6 md:pt-6 lg:px-8 lg:pt-8">
+          <GlobalSearch />
+        </div>
+
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+        <main className="flex-1 overflow-y-auto px-4 pb-4 md:px-6 md:pb-6 lg:px-8 lg:pb-8">
           <Outlet />
         </main>
       </div>

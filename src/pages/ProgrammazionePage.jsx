@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
 import { STATO_UNITA } from '../lib/costanti'
@@ -10,12 +11,6 @@ import {
   onVacanze,
   onDistribuzioni,
   setDistribuzioniClasse,
-  addPercorso,
-  updatePercorso,
-  deletePercorso,
-  addUnita,
-  updateUnita,
-  deleteUnita,
 } from '../lib/firestore'
 import {
   format,
@@ -28,7 +23,6 @@ import {
 } from 'date-fns'
 import { it } from 'date-fns/locale'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import ConfirmDialog from '../components/common/ConfirmDialog'
 
 const STATO_UNITA_DOT = {
   [STATO_UNITA.DA_FARE]: 'bg-gray-300',
@@ -59,19 +53,6 @@ export default function ProgrammazionePage() {
   const [selectedClasse, setSelectedClasse] = useState(null)
   const [loading, setLoading] = useState(true)
   const [distributing, setDistributing] = useState(false)
-
-  // Percorso editing
-  const [editingPercorso, setEditingPercorso] = useState(null) // null or {id, titolo, descrizione}
-  const [newPercorsoForm, setNewPercorsoForm] = useState({ titolo: '', descrizione: '' })
-  const [showNewPercorso, setShowNewPercorso] = useState(false)
-
-  // Unita editing
-  const [newUnitaForm, setNewUnitaForm] = useState({})
-  const [showNewUnita, setShowNewUnita] = useState(null) // percorsoId
-
-  // Confirm dialogs
-  const [confirmDeletePercorso, setConfirmDeletePercorso] = useState(null) // percorsoId or null
-  const [confirmDeleteUnita, setConfirmDeleteUnita] = useState(null) // { percorsoId, unitaId } or null
 
   const giornoLibero = annoConfig?.giornoLibero ?? null
   const dataFineScuola = annoConfig?.dataFineScuola || null
@@ -282,80 +263,6 @@ export default function ProgrammazionePage() {
     }
   }
 
-  // ── Percorso CRUD ──
-  async function handleAddPercorso(e) {
-    e.preventDefault()
-    if (!newPercorsoForm.titolo.trim() || !selectedClasse || !annoAttivo) return
-    const match = assegnazioni.find((a) => a.classe === selectedClasse)
-    try {
-      await addPercorso({
-        annoScolastico: annoAttivo,
-        classe: selectedClasse,
-        materia: match?.materia || '',
-        titolo: newPercorsoForm.titolo.trim(),
-        descrizione: newPercorsoForm.descrizione.trim(),
-      })
-      setNewPercorsoForm({ titolo: '', descrizione: '' })
-      setShowNewPercorso(false)
-    } catch (err) {
-      toast.error('Errore durante la creazione del percorso.')
-    }
-  }
-
-  async function handleSavePercorso() {
-    if (!editingPercorso) return
-    try {
-      await updatePercorso(editingPercorso.id, {
-        titolo: editingPercorso.titolo,
-        descrizione: editingPercorso.descrizione,
-      })
-      setEditingPercorso(null)
-    } catch (err) {
-      toast.error('Errore durante il salvataggio del percorso.')
-    }
-  }
-
-  async function handleDeletePercorso(id) {
-    try {
-      await deletePercorso(id)
-    } catch (err) {
-      toast.error('Errore durante l\'eliminazione del percorso.')
-    } finally {
-      setConfirmDeletePercorso(null)
-    }
-  }
-
-  // ── Unita CRUD ──
-  async function handleAddUnita(percorsoId) {
-    const form = newUnitaForm[percorsoId]
-    if (!form?.titolo?.trim()) return
-    const existingUnits = unitaByPercorso[percorsoId] || []
-    try {
-      await addUnita(percorsoId, {
-        titolo: form.titolo.trim(),
-        orePreviste: Number(form.orePreviste) || 2,
-        ordine: existingUnits.length + 1,
-        stato: STATO_UNITA.DA_FARE,
-        descrizione: '',
-        materiali: [],
-      })
-      setNewUnitaForm((prev) => ({ ...prev, [percorsoId]: { titolo: '', orePreviste: 2 } }))
-      setShowNewUnita(null)
-    } catch (err) {
-      toast.error('Errore durante la creazione dell\'unita.')
-    }
-  }
-
-  async function handleDeleteUnita(percorsoId, unitaId) {
-    try {
-      await deleteUnita(percorsoId, unitaId)
-    } catch (err) {
-      toast.error('Errore durante l\'eliminazione dell\'unita.')
-    } finally {
-      setConfirmDeleteUnita(null)
-    }
-  }
-
   if (configLoading || loading) return <LoadingSpinner />
 
   if (!annoAttivo) {
@@ -384,28 +291,6 @@ export default function ProgrammazionePage() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      {/* Confirm dialog: delete percorso */}
-      <ConfirmDialog
-        open={!!confirmDeletePercorso}
-        title="Elimina percorso"
-        message="Sei sicuro di voler eliminare questo percorso e tutte le sue unita?"
-        confirmText="Elimina"
-        danger
-        onConfirm={() => handleDeletePercorso(confirmDeletePercorso)}
-        onCancel={() => setConfirmDeletePercorso(null)}
-      />
-
-      {/* Confirm dialog: delete unita */}
-      <ConfirmDialog
-        open={!!confirmDeleteUnita}
-        title="Elimina unita"
-        message="Sei sicuro di voler eliminare questa unita?"
-        confirmText="Elimina"
-        danger
-        onConfirm={() => handleDeleteUnita(confirmDeleteUnita?.percorsoId, confirmDeleteUnita?.unitaId)}
-        onCancel={() => setConfirmDeleteUnita(null)}
-      />
-
       {/* Header + class selector */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Programmazione</h1>
@@ -464,50 +349,25 @@ export default function ProgrammazionePage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* ── LEFT: Percorsi panel ── */}
+        {/* ── LEFT: Read-only Percorsi summary panel ── */}
         <div className="lg:col-span-1 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Percorsi</h2>
-            <button
-              onClick={() => setShowNewPercorso(!showNewPercorso)}
+            <Link
+              to="/percorsi"
               className="text-sm text-blue-600 hover:text-blue-800 font-medium"
             >
-              {showNewPercorso ? 'Annulla' : '+ Nuovo'}
-            </button>
+              Gestisci in Percorsi
+            </Link>
           </div>
 
-          {/* New percorso form */}
-          {showNewPercorso && (
-            <form onSubmit={handleAddPercorso} className="p-3 bg-white rounded-lg border border-blue-200 space-y-2">
-              <input
-                type="text"
-                value={newPercorsoForm.titolo}
-                onChange={(e) => setNewPercorsoForm((f) => ({ ...f, titolo: e.target.value }))}
-                placeholder="Titolo percorso"
-                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                autoFocus
-              />
-              <input
-                type="text"
-                value={newPercorsoForm.descrizione}
-                onChange={(e) => setNewPercorsoForm((f) => ({ ...f, descrizione: e.target.value }))}
-                placeholder="Descrizione (opzionale)"
-                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              />
-              <button
-                type="submit"
-                disabled={!newPercorsoForm.titolo.trim()}
-                className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                Crea percorso
-              </button>
-            </form>
-          )}
-
-          {/* Percorsi list */}
-          {classePercorsi.length === 0 && !showNewPercorso && (
+          {/* Percorsi list (read-only) */}
+          {classePercorsi.length === 0 && (
             <p className="text-sm text-gray-400 italic">
-              Nessun percorso per {selectedClasse}. Creane uno per iniziare.
+              Nessun percorso per {selectedClasse}.{' '}
+              <Link to="/percorsi" className="text-blue-500 hover:text-blue-700 not-italic">
+                Creane uno nella pagina Percorsi.
+              </Link>
             </p>
           )}
 
@@ -515,52 +375,18 @@ export default function ProgrammazionePage() {
             const units = (unitaByPercorso[p.id] || []).slice().sort((a, b) => (a.ordine || 0) - (b.ordine || 0))
             const color = percorsoColorMap[p.id] || PERCORSO_COLORS[0]
             const totOre = units.reduce((s, u) => s + (u.orePreviste || 0), 0)
-            const isEditing = editingPercorso?.id === p.id
 
             return (
               <div key={p.id} className={`rounded-lg border ${color.border} overflow-hidden`}>
                 {/* Percorso header */}
-                {isEditing ? (
-                  <div className="p-3 space-y-2 bg-white">
-                    <input
-                      type="text"
-                      value={editingPercorso.titolo}
-                      onChange={(e) => setEditingPercorso((prev) => ({ ...prev, titolo: e.target.value }))}
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
-                    <div className="flex gap-2">
-                      <button onClick={handleSavePercorso} className="text-xs text-blue-600 font-medium">Salva</button>
-                      <button onClick={() => setEditingPercorso(null)} className="text-xs text-gray-500">Annulla</button>
-                    </div>
+                <div className={`px-3 py-2 ${color.bg} flex items-center justify-between`}>
+                  <div>
+                    <span className={`text-sm font-semibold ${color.text}`}>{p.titolo}</span>
+                    <span className="text-xs text-gray-500 ml-2">{totOre}h</span>
                   </div>
-                ) : (
-                  <div className={`px-3 py-2 ${color.bg} flex items-center justify-between`}>
-                    <div>
-                      <span className={`text-sm font-semibold ${color.text}`}>{p.titolo}</span>
-                      <span className="text-xs text-gray-500 ml-2">{totOre}h</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setEditingPercorso({ id: p.id, titolo: p.titolo, descrizione: p.descrizione || '' })}
-                        className="text-gray-400 hover:text-gray-600 p-0.5"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => setConfirmDeletePercorso(p.id)}
-                        className="text-red-300 hover:text-red-500 p-0.5"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                )}
+                </div>
 
-                {/* Unita list */}
+                {/* Unita list (read-only) */}
                 <div className="bg-white">
                   {units.map((u) => (
                     <div key={u.id} className="flex items-center gap-2 px-3 py-1.5 border-t border-gray-100 text-xs">
@@ -568,68 +394,12 @@ export default function ProgrammazionePage() {
                       <span className="font-mono text-gray-400 w-4 shrink-0">{u.ordine}</span>
                       <span className="flex-1 text-gray-700 truncate">{u.titolo}</span>
                       <span className="text-gray-400 shrink-0">{u.orePreviste || 0}h</span>
-                      <button
-                        onClick={() => setConfirmDeleteUnita({ percorsoId: p.id, unitaId: u.id })}
-                        className="text-red-300 hover:text-red-500"
-                      >
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
                     </div>
                   ))}
-
-                  {/* Add unita */}
-                  {showNewUnita === p.id ? (
-                    <div className="flex items-center gap-2 px-3 py-2 border-t border-gray-100">
-                      <input
-                        type="text"
-                        value={newUnitaForm[p.id]?.titolo || ''}
-                        onChange={(e) => setNewUnitaForm((prev) => ({
-                          ...prev,
-                          [p.id]: { ...(prev[p.id] || {}), titolo: e.target.value },
-                        }))}
-                        placeholder="Titolo unita"
-                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                        autoFocus
-                      />
-                      <input
-                        type="number"
-                        value={newUnitaForm[p.id]?.orePreviste || 2}
-                        onChange={(e) => setNewUnitaForm((prev) => ({
-                          ...prev,
-                          [p.id]: { ...(prev[p.id] || {}), orePreviste: e.target.value },
-                        }))}
-                        className="w-12 px-1 py-1 border border-gray-300 rounded text-xs text-center focus:ring-2 focus:ring-blue-500 outline-none"
-                        min="1"
-                      />
-                      <span className="text-xs text-gray-400">h</span>
-                      <button
-                        onClick={() => handleAddUnita(p.id)}
-                        className="text-xs text-blue-600 font-medium"
-                      >
-                        +
-                      </button>
-                      <button
-                        onClick={() => setShowNewUnita(null)}
-                        className="text-xs text-gray-400"
-                      >
-                        x
-                      </button>
+                  {units.length === 0 && (
+                    <div className="px-3 py-2 text-xs text-gray-400 italic border-t border-gray-100">
+                      Nessuna unita
                     </div>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setShowNewUnita(p.id)
-                        setNewUnitaForm((prev) => ({
-                          ...prev,
-                          [p.id]: prev[p.id] || { titolo: '', orePreviste: 2 },
-                        }))
-                      }}
-                      className="w-full text-left px-3 py-1.5 border-t border-gray-100 text-xs text-blue-500 hover:bg-blue-50"
-                    >
-                      + Aggiungi unita
-                    </button>
                   )}
                 </div>
               </div>

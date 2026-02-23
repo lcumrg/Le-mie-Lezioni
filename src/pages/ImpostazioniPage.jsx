@@ -12,6 +12,7 @@ import {
   onVacanze,
   addVacanza,
   deleteVacanza,
+  resetAnnoScolastico,
 } from '../lib/firestore'
 import { parseExcel, importToFirestore } from '../lib/importExcel'
 import {
@@ -87,6 +88,10 @@ export default function ImpostazioniPage() {
   const fileInputRef = useRef(null)
   const [importPreview, setImportPreview] = useState(null)
   const [importing, setImporting] = useState(false)
+
+  // --- Reset dati ---
+  const [resetConfirm, setResetConfirm] = useState(false)
+  const [resetting, setResetting] = useState(false)
 
   // Load assegnazioni, orari, vacanze when annoAttivo changes
   useEffect(() => {
@@ -327,6 +332,31 @@ export default function ImpostazioniPage() {
 
   function handleCancelDelete() {
     setDeleteConfirm({ open: false, id: null, type: '', label: '' })
+  }
+
+  // ── Reset handlers ──
+
+  async function handleResetAnno() {
+    if (!annoAttivo) return
+    setResetting(true)
+    setResetConfirm(false)
+    try {
+      const summary = await resetAnnoScolastico(annoAttivo)
+      const parts = []
+      if (summary.assegnazioni) parts.push(`${summary.assegnazioni} assegnazioni`)
+      if (summary.orari) parts.push(`${summary.orari} orari`)
+      if (summary.percorsi) parts.push(`${summary.percorsi} percorsi`)
+      if (summary.unita) parts.push(`${summary.unita} unita`)
+      if (summary.lezioni) parts.push(`${summary.lezioni} lezioni`)
+      if (summary.vacanze) parts.push(`${summary.vacanze} vacanze`)
+      toast.success(parts.length > 0
+        ? `Dati eliminati: ${parts.join(', ')}`
+        : 'Nessun dato da eliminare')
+    } catch (err) {
+      toast.error('Errore durante il reset: ' + err.message)
+    } finally {
+      setResetting(false)
+    }
   }
 
   // ── Import Excel handlers ──
@@ -958,6 +988,13 @@ export default function ImpostazioniPage() {
             >
               Scarica template Excel
             </a>
+            <a
+              href="/test-anno-prova.xlsx"
+              download
+              className="px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-lg hover:bg-amber-700"
+            >
+              Scarica dati di prova
+            </a>
             <button
               onClick={() => fileInputRef.current?.click()}
               className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
@@ -1015,6 +1052,9 @@ export default function ImpostazioniPage() {
                   <div className="bg-white rounded px-3 py-2 border border-blue-200">
                     <div className="text-lg font-bold text-orange-600">{importPreview.vacanze.length}</div>
                     <div className="text-xs text-gray-500">Vacanze</div>
+                    <div className="text-[10px] text-gray-400 mt-1">
+                      {importPreview.vacanze.map((v) => `${v.nome} (${v.dataInizio})`).join(', ')}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1030,6 +1070,54 @@ export default function ImpostazioniPage() {
                 <button
                   onClick={() => setImportPreview(null)}
                   disabled={importing}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                >
+                  Annulla
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ── 7. Reset Dati ── */}
+      {annoAttivo && (
+        <section className="bg-white rounded-lg border border-red-200 p-6">
+          <h2 className="text-lg font-semibold text-red-700 mb-4">
+            Reset Dati Anno
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Cancella <strong>tutti</strong> i dati dell'anno scolastico attivo ({annoAttivo}):
+            classi, orario, percorsi, unita, lezioni, vacanze, ricorrenze e distribuzioni.
+            La configurazione (ore scolastiche, giorno libero, fine scuola) viene mantenuta.
+          </p>
+          {!resetConfirm ? (
+            <button
+              onClick={() => setResetConfirm(true)}
+              disabled={resetting}
+              className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50"
+            >
+              {resetting ? 'Eliminazione in corso...' : 'Cancella tutti i dati'}
+            </button>
+          ) : (
+            <div className="p-4 bg-red-50 border border-red-300 rounded-lg space-y-3">
+              <p className="text-sm font-semibold text-red-800">
+                Sei sicuro? Questa azione e' irreversibile.
+              </p>
+              <p className="text-xs text-red-600">
+                Verranno eliminati tutti i dati dell'anno {annoAttivo}.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleResetAnno}
+                  disabled={resetting}
+                  className="px-4 py-2 bg-red-700 text-white text-sm font-medium rounded-lg hover:bg-red-800 disabled:opacity-50"
+                >
+                  {resetting ? 'Eliminazione in corso...' : 'Conferma eliminazione'}
+                </button>
+                <button
+                  onClick={() => setResetConfirm(false)}
+                  disabled={resetting}
                   className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50"
                 >
                   Annulla

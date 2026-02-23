@@ -32,6 +32,71 @@ function num(val) {
   return isNaN(n) ? 0 : n
 }
 
+/**
+ * Converts any date value from Excel into ISO format (YYYY-MM-DD).
+ * Handles: JS Date objects, Excel serial numbers, DD/MM/YYYY, D/M/YYYY,
+ * YYYY-MM-DD (passthrough), and other common Italian date formats.
+ * Returns empty string if conversion fails.
+ */
+function parseDate(val) {
+  if (!val && val !== 0) return ''
+
+  // Already a Date object (XLSX sometimes returns these)
+  if (val instanceof Date) {
+    const y = val.getFullYear()
+    const m = String(val.getMonth() + 1).padStart(2, '0')
+    const d = String(val.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+
+  // Excel serial number (number of days since 1899-12-30)
+  if (typeof val === 'number' && val > 30000 && val < 100000) {
+    // Use XLSX utility to convert serial to date
+    const date = XLSX.SSF.parse_date_code(val)
+    if (date) {
+      const y = date.y
+      const m = String(date.m).padStart(2, '0')
+      const d = String(date.d).padStart(2, '0')
+      return `${y}-${m}-${d}`
+    }
+  }
+
+  const s = val.toString().trim()
+  if (!s) return ''
+
+  // Already ISO format YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+
+  // DD/MM/YYYY or D/M/YYYY (Italian format, also with -)
+  const dmy = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/)
+  if (dmy) {
+    const d = String(Number(dmy[1])).padStart(2, '0')
+    const m = String(Number(dmy[2])).padStart(2, '0')
+    const y = dmy[3]
+    return `${y}-${m}-${d}`
+  }
+
+  // YYYY/MM/DD variant
+  const ymd = s.match(/^(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})$/)
+  if (ymd) {
+    const y = ymd[1]
+    const m = String(Number(ymd[2])).padStart(2, '0')
+    const d = String(Number(ymd[3])).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+
+  // Try native Date parsing as last resort (e.g. "Mon Dec 22 2025...")
+  const parsed = new Date(s)
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear()
+    const m = String(parsed.getMonth() + 1).padStart(2, '0')
+    const d = String(parsed.getDate()).padStart(2, '0')
+    if (y > 2000 && y < 2100) return `${y}-${m}-${d}`
+  }
+
+  return ''
+}
+
 function padTime(val) {
   const s = str(val)
   if (/^\d{1,2}:\d{2}$/.test(s)) {
@@ -115,11 +180,13 @@ export function parseExcel(file) {
         // ── Vacanze ──
         const wsVac = wb.Sheets['Vacanze']
         if (wsVac) {
-          const rows = XLSX.utils.sheet_to_json(wsVac)
+          const rows = XLSX.utils.sheet_to_json(wsVac, { raw: false, dateNF: 'yyyy-mm-dd' })
           for (const row of rows) {
             const nome = str(row['Nome'] || row['nome'])
-            const dataInizio = str(row['Data Inizio'] || row['DataInizio'] || row['data_inizio'] || row['inizio'])
-            const dataFine = str(row['Data Fine'] || row['DataFine'] || row['data_fine'] || row['fine']) || dataInizio
+            const rawInizio = row['Data Inizio'] ?? row['DataInizio'] ?? row['data_inizio'] ?? row['inizio'] ?? ''
+            const rawFine = row['Data Fine'] ?? row['DataFine'] ?? row['data_fine'] ?? row['fine'] ?? ''
+            const dataInizio = parseDate(rawInizio)
+            const dataFine = parseDate(rawFine) || dataInizio
             const tipo = str(row['Tipo'] || row['tipo']) || 'vacanza'
             if (nome && dataInizio) {
               result.vacanze.push({ nome, dataInizio, dataFine, tipo })

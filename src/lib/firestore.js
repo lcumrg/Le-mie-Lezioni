@@ -7,11 +7,13 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   query,
   where,
   orderBy,
   onSnapshot,
   serverTimestamp,
+  writeBatch,
 } from 'firebase/firestore'
 import { db } from './firebase'
 
@@ -291,4 +293,91 @@ export async function clonePercorsiToAnno(annoOrigine, annoDestinazione) {
   }
 
   return count
+}
+
+// ── Reset: cancella tutti i dati di un anno scolastico ──
+
+async function deleteCollectionByAnno(collRef, annoScolastico) {
+  const q = query(collRef, where('annoScolastico', '==', annoScolastico))
+  const snap = await getDocs(q)
+  let count = 0
+  // Firestore batches max 500 ops
+  let batch = writeBatch(db)
+  let batchCount = 0
+  for (const d of snap.docs) {
+    batch.delete(d.ref)
+    batchCount++
+    count++
+    if (batchCount >= 450) {
+      await batch.commit()
+      batch = writeBatch(db)
+      batchCount = 0
+    }
+  }
+  if (batchCount > 0) await batch.commit()
+  return count
+}
+
+/**
+ * Deletes all data for a given anno scolastico:
+ * assegnazioni, orari, lezioni, vacanze, percorsi (with subcollection unita),
+ * ricorrenze and distribuzioni for affected classes.
+ */
+export async function resetAnnoScolastico(annoScolastico) {
+  const summary = { assegnazioni: 0, orari: 0, lezioni: 0, vacanze: 0, percorsi: 0, unita: 0 }
+
+  // 1. Delete percorsi + their unita subcollections
+  const percQ = query(percorsiRef, where('annoScolastico', '==', annoScolastico))
+  const percSnap = await getDocs(percQ)
+  for (const percDoc of percSnap.docs) {
+    // Delete all unita in subcollection
+    const unitaSnap = await getDocs(collection(db, 'percorsi', percDoc.id, 'unita'))
+    let batch = writeBatch(db)
+    let bc = 0
+    for (const u of unitaSnap.docs) {
+      batch.delete(u.ref)
+      bc++
+      summary.unita++
+      if (bc >= 450) { await batch.commit(); batch = writeBatch(db); bc = 0 }
+    }
+    batch.delete(percDoc.ref)
+    bc++
+    summary.percorsi++
+    if (bc > 0) await batch.commit()
+  }
+
+  // 2. Delete flat collections
+  summary.assegnazioni = await deleteCollectionByAnno(assegnazioniRef, annoScolastico)
+  summary.orari = await deleteCollectionByAnno(orariRef, annoScolastico)
+  summary.lezioni = await deleteCollectionByAnno(lezioniRef, annoScolastico)
+  summary.vacanze = await deleteCollectionByAnno(vacanzeRef, annoScolastico)
+
+  // 3. Clear config docs (ricorrenze, distribuzioni)
+  try {
+    const ricRef = doc(db, 'config', 'ricorrenze')
+    const ricSnap = await getDoc(ricRef)
+    if (ricSnap.exists()) {
+      const data = ricSnap.data()
+      const updates = {}
+      for (const key of Object.keys(data)) {
+        updates[key] = deleteField()
+      }
+      if (Object.keys(updates).length > 0) await updateDoc(ricRef, updates)
+    }
+  } catch { /* ignore */ }
+
+  try {
+    const distRef = doc(db, 'config', 'distribuzioni')
+    const distSnap = await getDoc(distRef)
+    if (distSnap.exists()) {
+      const data = distSnap.data()
+      const updates = {}
+      for (const key of Object.keys(data)) {
+        updates[key] = deleteField()
+      }
+      if (Object.keys(updates).length > 0) await updateDoc(distRef, updates)
+    }
+  } catch { /* ignore */ }
+
+  return summary
 }

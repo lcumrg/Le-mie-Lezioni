@@ -274,7 +274,7 @@ export default function DashboardPage() {
               <button
                 key={s}
                 onClick={(e) => { e.stopPropagation(); handleStatoChange(lez.id, s) }}
-                className={`w-5 h-5 rounded text-[10px] font-bold leading-none flex items-center justify-center transition-colors ${
+                className={`w-6 h-6 rounded text-[11px] font-bold leading-none flex items-center justify-center transition-colors ${
                   lez.stato === s
                     ? STATO_BADGE[s]
                     : 'bg-gray-100 text-gray-300 hover:bg-gray-200 hover:text-gray-500'
@@ -634,12 +634,12 @@ export default function DashboardPage() {
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1.5">
                             {STATI_LEZIONE.map((s) => (
                               <button
                                 key={s}
                                 onClick={() => handleStatoChange(lez.id, s)}
-                                className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${
+                                className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-colors min-w-[2rem] ${
                                   lez.stato === s
                                     ? STATO_BADGE[s]
                                     : 'bg-gray-100 text-gray-400 hover:bg-gray-200'

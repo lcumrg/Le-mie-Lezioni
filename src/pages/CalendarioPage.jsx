@@ -501,19 +501,28 @@ export default function CalendarioPage() {
               </p>
             ) : (
               <div className="space-y-2">
+                {vacanza && dayLezioni.length > 0 && (
+                  <p className="text-xs text-amber-600 bg-amber-50 rounded px-2 py-1 italic">
+                    Giorno non scolastico — le lezioni sotto non sono da considerare
+                  </p>
+                )}
                 {dayLezioni.map((lez) => (
                   <div
                     key={lez.id}
-                    className={`p-3 rounded-lg border ${STATO_COLORS[lez.stato] || 'bg-white border-gray-200'}`}
+                    className={`p-3 rounded-lg border ${
+                      vacanza
+                        ? 'bg-gray-50 border-gray-200 opacity-50'
+                        : STATO_COLORS[lez.stato] || 'bg-white border-gray-200'
+                    }`}
                   >
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-mono text-gray-500 w-24 shrink-0">
+                      <span className={`text-sm font-mono w-24 shrink-0 ${vacanza ? 'text-gray-400 line-through' : 'text-gray-500'}`}>
                         {lez.oraInizio} – {lez.oraFine}
                       </span>
-                      <span className="text-sm font-bold text-gray-800 w-12 shrink-0">
+                      <span className={`text-sm font-bold w-12 shrink-0 ${vacanza ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                         {lez.classe}
                       </span>
-                      <span className="text-sm text-gray-600 flex-1 min-w-0">
+                      <span className={`text-sm flex-1 min-w-0 ${vacanza ? 'text-gray-400 line-through' : 'text-gray-600'}`}>
                         <span className="truncate block">
                           {lez.titoloOverride || lez.materia}
                         </span>

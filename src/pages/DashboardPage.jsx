@@ -19,6 +19,7 @@ import {
   GIORNI_LABEL,
   GIORNI_SHORT,
   ORE_ROMAN,
+  TIPO_VACANZA_LABEL,
 } from '../lib/costanti'
 import { format, addDays, isToday, parseISO, startOfWeek, isBefore, isAfter } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -145,12 +146,16 @@ export default function DashboardPage() {
   // ── Build days structure ──
   const days = []
   for (let i = 0; i < 6; i++) {
+    const date = addDays(start, i)
+    const dayStr = format(date, 'yyyy-MM-dd')
+    const vacanza = vacanze.find((v) => dayStr >= v.dataInizio && dayStr <= v.dataFine) || null
     days.push({
       index: i,
-      date: addDays(start, i),
+      date,
       label: GIORNI_LABEL[i],
       short: GIORNI_SHORT[i],
       isFree: i === giornoLibero,
+      vacanza,
     })
   }
 
@@ -236,7 +241,8 @@ export default function DashboardPage() {
   for (let i = 0; i < 6; i++) {
     const day = addDays(start, i)
     const dayStr = format(day, 'yyyy-MM-dd')
-    lezioniPerGiorno[dayStr] = { date: day, label: GIORNI_LABEL[i], lezioni: [] }
+    const vacanza = vacanze.find((v) => dayStr >= v.dataInizio && dayStr <= v.dataFine) || null
+    lezioniPerGiorno[dayStr] = { date: day, label: GIORNI_LABEL[i], lezioni: [], vacanza }
   }
   for (const lez of lezioni) {
     const data = lez.data instanceof Date
@@ -490,13 +496,18 @@ export default function DashboardPage() {
                       <th
                         key={day.index}
                         className={`px-1 py-3 border-b border-r border-gray-200 text-center text-xs font-medium last:border-r-0 ${
-                          today ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-600'
+                          day.vacanza ? 'bg-amber-50 text-amber-600' : today ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-600'
                         }`}
                       >
                         <div className="font-semibold">{day.short}</div>
-                        <div className={`text-[11px] ${today ? 'text-blue-500' : 'text-gray-400'}`}>
+                        <div className={`text-[11px] ${day.vacanza ? 'text-amber-500' : today ? 'text-blue-500' : 'text-gray-400'}`}>
                           {format(day.date, 'd MMM', { locale: it })}
                         </div>
+                        {day.vacanza && (
+                          <div className="text-[9px] text-amber-500 truncate max-w-[5rem] mx-auto" title={`${TIPO_VACANZA_LABEL[day.vacanza.tipo] || 'Non scolastico'}${day.vacanza.nome ? ': ' + day.vacanza.nome : ''}`}>
+                            {TIPO_VACANZA_LABEL[day.vacanza.tipo] || 'Non scol.'}
+                          </div>
+                        )}
                       </th>
                     )
                   })}
@@ -526,11 +537,15 @@ export default function DashboardPage() {
                         <td
                           key={day.index}
                           className={`border-b border-r border-gray-200 last:border-r-0 p-0.5 align-top ${
-                            today && !lez ? 'bg-blue-50/20' : ''
+                            day.vacanza ? 'bg-amber-50/30' : today && !lez ? 'bg-blue-50/20' : ''
                           }`}
                           style={{ height: '5.5rem' }}
                         >
-                          {lez ? renderCell(lez) : null}
+                          {lez ? (
+                            <div className={day.vacanza ? 'opacity-40 line-through' : ''}>
+                              {renderCell(lez)}
+                            </div>
+                          ) : null}
                         </td>
                       )
                     })}
@@ -564,17 +579,22 @@ export default function DashboardPage() {
       ) : (
         /* ── Fallback: list view ── */
         <div className="space-y-4 mb-6">
-          {Object.values(lezioniPerGiorno).map(({ date, label, lezioni: dayLezioni }) => (
+          {Object.values(lezioniPerGiorno).map(({ date, label, lezioni: dayLezioni, vacanza }) => (
             <div key={label}>
               <h3
                 className={`text-sm font-semibold mb-2 ${
-                  isToday(date) ? 'text-blue-600' : 'text-gray-500'
+                  vacanza ? 'text-amber-600' : isToday(date) ? 'text-blue-600' : 'text-gray-500'
                 }`}
               >
                 {label} {format(date, 'd MMM', { locale: it })}
                 {isToday(date) && (
                   <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
                     Oggi
+                  </span>
+                )}
+                {vacanza && (
+                  <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">
+                    {TIPO_VACANZA_LABEL[vacanza.tipo] || 'Non scolastico'}{vacanza.nome ? ` — ${vacanza.nome}` : ''}
                   </span>
                 )}
               </h3>
@@ -589,16 +609,18 @@ export default function DashboardPage() {
                       <div
                         key={lez.id}
                         className={`p-3 rounded-lg border ${
-                          lez.stato === STATO_LEZIONE.PIANIFICATA ? 'bg-blue-50 border-blue-200' :
-                          lez.stato === STATO_LEZIONE.SVOLTA ? 'bg-green-50 border-green-200' :
-                          'bg-red-50 border-red-200'
+                          vacanza
+                            ? 'bg-gray-50 border-gray-200 opacity-50'
+                            : lez.stato === STATO_LEZIONE.PIANIFICATA ? 'bg-blue-50 border-blue-200' :
+                              lez.stato === STATO_LEZIONE.SVOLTA ? 'bg-green-50 border-green-200' :
+                              'bg-red-50 border-red-200'
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <span className="text-sm font-mono text-gray-500 w-12 shrink-0">
+                          <span className={`text-sm font-mono w-12 shrink-0 ${vacanza ? 'text-gray-400 line-through' : 'text-gray-500'}`}>
                             {lez.oraInizio}
                           </span>
-                          <span className="text-sm font-bold text-gray-800 w-12 shrink-0">
+                          <span className={`text-sm font-bold w-12 shrink-0 ${vacanza ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                             {lez.classe}
                           </span>
                           <div className="flex-1 min-w-0">

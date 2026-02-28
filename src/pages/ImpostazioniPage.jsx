@@ -396,13 +396,14 @@ export default function ImpostazioniPage() {
     }
   }
 
-  // Auto-fill materia when classe is selected in orario form
-  function handleOrarioClasseChange(classe) {
-    const match = assegnazioni.find((a) => a.classe === classe)
+  // Set classe+materia when an assegnazione is selected in orario form
+  function handleOrarioAssegnazioneChange(value) {
+    // value is "CLASSE||MATERIA"
+    const [classe, materia] = value.split('||')
     setOrarioForm((f) => ({
       ...f,
-      classe,
-      materia: match ? match.materia : f.materia,
+      classe: classe || '',
+      materia: materia || '',
     }))
   }
 
@@ -420,7 +421,11 @@ export default function ImpostazioniPage() {
     if (orariPerGiorno[o.giorno]) orariPerGiorno[o.giorno].push(o)
   }
 
-  // Unique classes from assegnazioni for orario dropdown
+  // Assegnazioni for orario dropdown (classe + materia pairs, sorted)
+  const assegnazioniOrdinati = [...assegnazioni].sort((a, b) =>
+    a.classe.localeCompare(b.classe) || a.materia.localeCompare(b.materia)
+  )
+  // Keep classiDisponibili for the fallback form and extra-lesson form
   const classiDisponibili = [...new Set(assegnazioni.map((a) => a.classe))].sort()
 
   const hasOreConfig = oreLezione.length > 0
@@ -813,16 +818,16 @@ export default function ImpostazioniPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Classe</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Classe — Materia</label>
                 <select
-                  value={orarioForm.classe}
-                  onChange={(e) => handleOrarioClasseChange(e.target.value)}
+                  value={orarioForm.classe ? `${orarioForm.classe}||${orarioForm.materia}` : ''}
+                  onChange={(e) => handleOrarioAssegnazioneChange(e.target.value)}
                   className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">—</option>
-                  {classiDisponibili.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
+                  {assegnazioniOrdinati.map((a) => (
+                    <option key={`${a.classe}||${a.materia}`} value={`${a.classe}||${a.materia}`}>
+                      {a.classe} — {a.materia}
                     </option>
                   ))}
                 </select>
@@ -889,15 +894,17 @@ export default function ImpostazioniPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Classe</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Classe — Materia</label>
                 <select
-                  value={orarioForm.classe}
-                  onChange={(e) => handleOrarioClasseChange(e.target.value)}
+                  value={orarioForm.classe ? `${orarioForm.classe}||${orarioForm.materia}` : ''}
+                  onChange={(e) => handleOrarioAssegnazioneChange(e.target.value)}
                   className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">—</option>
-                  {classiDisponibili.map((c) => (
-                    <option key={c} value={c}>{c}</option>
+                  {assegnazioniOrdinati.map((a) => (
+                    <option key={`${a.classe}||${a.materia}`} value={`${a.classe}||${a.materia}`}>
+                      {a.classe} — {a.materia}
+                    </option>
                   ))}
                 </select>
               </div>

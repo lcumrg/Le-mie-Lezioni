@@ -117,11 +117,11 @@ export default function ProgrammazionePage() {
     return result
   }, [classePercorsi, unitaByPercorso])
 
-  // Weekly hours for selected class
+  // Weekly hours for selected class+materia
   const oreSettimanali = useMemo(() => {
     if (!selectedClasse) return 0
-    return orari.filter((o) => o.classe === selectedClasse && o.giorno !== giornoLibero).length
-  }, [selectedClasse, orari, giornoLibero])
+    return orari.filter((o) => o.classe === selectedClasse && o.materia === selectedMateria && o.giorno !== giornoLibero).length
+  }, [selectedClasse, selectedMateria, orari, giornoLibero])
 
   // Percorso color map
   const percorsoColorMap = useMemo(() => {
@@ -182,9 +182,9 @@ export default function ProgrammazionePage() {
           continue
         }
 
-        // Count orari for this class on this day-of-week
+        // Count orari for this class+materia on this day-of-week
         oreDisponibili += orari.filter(
-          (o) => o.giorno === d && o.classe === selectedClasse
+          (o) => o.giorno === d && o.classe === selectedClasse && o.materia === selectedMateria
         ).length
       }
 
@@ -202,7 +202,7 @@ export default function ProgrammazionePage() {
     }
 
     return result
-  }, [dataFineScuola, selectedClasse, orari, vacanze, giornoLibero])
+  }, [dataFineScuola, selectedClasse, selectedMateria, orari, vacanze, giornoLibero])
 
   // Total available hours
   const oreDisponibiliTotali = weeks.reduce((s, w) => s + w.oreDisponibili, 0)
@@ -213,13 +213,13 @@ export default function ProgrammazionePage() {
   // Current ricorrenze for selected class
   const classeRicorrenze = ricorrenze[selectedClasse] || {}
 
-  // Build orario grid for selected class: array of { giorno, numeroOra, oraInizio, oraFine }
+  // Build orario grid for selected class+materia: array of { giorno, numeroOra, oraInizio, oraFine }
   const classeOrarioSlots = useMemo(() => {
     if (!selectedClasse) return []
     return orari
-      .filter((o) => o.classe === selectedClasse && o.giorno !== giornoLibero)
+      .filter((o) => o.classe === selectedClasse && o.materia === selectedMateria && o.giorno !== giornoLibero)
       .sort((a, b) => a.giorno - b.giorno || (a.numeroOra || 0) - (b.numeroOra || 0))
-  }, [selectedClasse, orari, giornoLibero])
+  }, [selectedClasse, selectedMateria, orari, giornoLibero])
 
   // Unique giorni that have slots for this class
   const giorniConOre = useMemo(() => {
@@ -439,7 +439,7 @@ export default function ProgrammazionePage() {
     )
   }
 
-  if (classi.length === 0) {
+  if (assegnazioniTabs.length === 0) {
     return (
       <div className="text-center py-12">
         <h2 className="text-xl font-semibold text-gray-900 mb-2">Programmazione</h2>

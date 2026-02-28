@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { onUnita, onLezioniByPercorso } from '../../lib/firestore'
+import { onUnita, onLezioniByPercorso, addUnita } from '../../lib/firestore'
 import { STATO_UNITA, STATO_UNITA_LABEL, STATO_LEZIONE } from '../../lib/costanti'
 
 const STATO_DOT = {
@@ -57,6 +57,36 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
 
   function handleDeselectAll() {
     onChange({ percorsoId: null, unitaId: null, unitaTitolo: '' })
+  }
+
+  // ── Inline add-unita ──
+  const [addingToPercorso, setAddingToPercorso] = useState(null) // percorsoId or null
+  const [newUnitaForm, setNewUnitaForm] = useState({ titolo: '', orePreviste: 1 })
+  const [savingUnita, setSavingUnita] = useState(false)
+
+  async function handleAddUnita(pId) {
+    const titolo = newUnitaForm.titolo.trim()
+    if (!titolo || savingUnita) return
+    const units = unitaByPercorso[pId] || []
+    const maxOrdine = units.length > 0 ? Math.max(...units.map((u) => u.ordine || 0)) : 0
+
+    setSavingUnita(true)
+    try {
+      await addUnita(pId, {
+        titolo,
+        descrizione: '',
+        ordine: maxOrdine + 1,
+        orePreviste: Number(newUnitaForm.orePreviste) || 1,
+        stato: STATO_UNITA.DA_FARE,
+        materiali: [],
+      })
+      setAddingToPercorso(null)
+      setNewUnitaForm({ titolo: '', orePreviste: 1 })
+    } catch {
+      // silently fail - the user will see nothing was added
+    } finally {
+      setSavingUnita(false)
+    }
   }
 
   if (percorsi.length === 0) {
@@ -147,7 +177,7 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
               {/* Units list */}
               {isExpanded && (
                 <div className="border-t border-gray-200">
-                  {units.length === 0 ? (
+                  {units.length === 0 && addingToPercorso !== p.id ? (
                     <p className="px-3 py-2 text-xs text-gray-400 italic">
                       Nessuna unita in questo percorso.
                     </p>
@@ -227,6 +257,71 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
                         )
                       })}
                     </div>
+                  )}
+
+                  {/* Inline add-unita form */}
+                  {addingToPercorso === p.id ? (
+                    <div className="px-3 py-2 border-t border-dashed border-gray-200 bg-green-50">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newUnitaForm.titolo}
+                          onChange={(e) => setNewUnitaForm((f) => ({ ...f, titolo: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); handleAddUnita(p.id) }
+                            if (e.key === 'Escape') { setAddingToPercorso(null); setNewUnitaForm({ titolo: '', orePreviste: 1 }) }
+                          }}
+                          placeholder="Titolo nuova unita..."
+                          autoFocus
+                          className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        />
+                        <input
+                          type="number"
+                          value={newUnitaForm.orePreviste}
+                          onChange={(e) => setNewUnitaForm((f) => ({ ...f, orePreviste: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); handleAddUnita(p.id) }
+                            if (e.key === 'Escape') { setAddingToPercorso(null); setNewUnitaForm({ titolo: '', orePreviste: 1 }) }
+                          }}
+                          min="1"
+                          className="w-12 px-1 py-1 border border-gray-300 rounded text-xs text-center focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                          title="Ore previste"
+                        />
+                        <span className="text-[10px] text-gray-400">h</span>
+                        <button
+                          type="button"
+                          onClick={() => handleAddUnita(p.id)}
+                          disabled={!newUnitaForm.titolo.trim() || savingUnita}
+                          className="p-1 text-green-600 hover:text-green-800 disabled:opacity-40"
+                          title="Aggiungi"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setAddingToPercorso(null); setNewUnitaForm({ titolo: '', orePreviste: 1 }) }}
+                          className="p-1 text-gray-400 hover:text-gray-600"
+                          title="Annulla"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => { setAddingToPercorso(p.id); setNewUnitaForm({ titolo: '', orePreviste: 1 }) }}
+                      className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors border-t border-dashed border-gray-200"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                      </svg>
+                      Aggiungi unita
+                    </button>
                   )}
                 </div>
               )}

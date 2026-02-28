@@ -67,10 +67,10 @@ export default function PercorsiPage() {
     setEditingId(null)
   }
 
-  // Auto-fill materia when classe changes
-  function handleClasseChange(classe) {
-    const match = assegnazioni.find((a) => a.classe === classe)
-    setForm((f) => ({ ...f, classe, materia: match ? match.materia : f.materia }))
+  // Auto-fill materia when an assegnazione is selected (classe||materia)
+  function handleAssegnazioneChange(value) {
+    const [classe, materia] = value.split('||')
+    setForm((f) => ({ ...f, classe: classe || '', materia: materia || '' }))
   }
 
   async function handleSubmit(e) {
@@ -79,8 +79,8 @@ export default function PercorsiPage() {
       toast.error('Inserisci un titolo per il percorso.')
       return
     }
-    if (!form.classe) {
-      toast.error('Seleziona una classe.')
+    if (!form.classe || !form.materia) {
+      toast.error('Seleziona classe e materia.')
       return
     }
 
@@ -164,14 +164,15 @@ export default function PercorsiPage() {
     setEditingNoteId(null)
   }
 
-  // Duplicate percorso to another class
+  // Duplicate percorso to another class+materia
   async function handleDuplicate(percorso) {
     if (!duplicateClasse) {
-      toast.error('Seleziona una classe di destinazione.')
+      toast.error('Seleziona una destinazione.')
       return
     }
-    if (duplicateClasse === percorso.classe) {
-      toast.error('Seleziona una classe diversa da quella attuale.')
+    const [destClasse, destMateria] = duplicateClasse.split('||')
+    if (destClasse === percorso.classe && destMateria === (percorso.materia || '')) {
+      toast.error('Seleziona una destinazione diversa da quella attuale.')
       return
     }
 
@@ -181,8 +182,8 @@ export default function PercorsiPage() {
       const newPercorsoRef = await addPercorso({
         annoScolastico: annoAttivo,
         titolo: percorso.titolo,
-        classe: duplicateClasse,
-        materia: percorso.materia || '',
+        classe: destClasse,
+        materia: destMateria || '',
         descrizione: percorso.descrizione || '',
         note: percorso.note || '',
       })
@@ -200,7 +201,7 @@ export default function PercorsiPage() {
         })
       }
 
-      toast.success(`Percorso duplicato in ${duplicateClasse}.`)
+      toast.success(`Percorso duplicato in ${destClasse} — ${destMateria}.`)
       setDuplicatingId(null)
       setDuplicateClasse('')
     } catch (err) {
@@ -223,16 +224,26 @@ export default function PercorsiPage() {
     )
   }
 
-  // Group percorsi by classe
+  // Assegnazioni sorted for dropdowns
+  const assegnazioniOrdinati = [...assegnazioni].sort((a, b) =>
+    a.classe.localeCompare(b.classe) || a.materia.localeCompare(b.materia)
+  )
+  // Keep classiDisponibili for duplicate dropdown
   const classiDisponibili = [...new Set(assegnazioni.map((a) => a.classe))].sort()
-  const percorsiPerClasse = {}
-  for (const c of classiDisponibili) percorsiPerClasse[c] = []
+
+  // Group percorsi by classe+materia
+  const percorsiPerAssegnazione = {}
+  for (const a of assegnazioniOrdinati) {
+    const key = `${a.classe}||${a.materia}`
+    percorsiPerAssegnazione[key] = []
+  }
   for (const p of percorsi) {
-    if (!percorsiPerClasse[p.classe]) percorsiPerClasse[p.classe] = []
-    percorsiPerClasse[p.classe].push(p)
+    const key = `${p.classe}||${p.materia}`
+    if (!percorsiPerAssegnazione[key]) percorsiPerAssegnazione[key] = []
+    percorsiPerAssegnazione[key].push(p)
   }
   // Sort each group by title
-  for (const arr of Object.values(percorsiPerClasse)) {
+  for (const arr of Object.values(percorsiPerAssegnazione)) {
     arr.sort((a, b) => (a.titolo || '').localeCompare(b.titolo || ''))
   }
 
@@ -273,27 +284,19 @@ export default function PercorsiPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Classe</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Classe — Materia</label>
                 <select
-                  value={form.classe}
-                  onChange={(e) => handleClasseChange(e.target.value)}
+                  value={form.classe ? `${form.classe}||${form.materia}` : ''}
+                  onChange={(e) => handleAssegnazioneChange(e.target.value)}
                   className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">—</option>
-                  {classiDisponibili.map((c) => (
-                    <option key={c} value={c}>{c}</option>
+                  {assegnazioniOrdinati.map((a) => (
+                    <option key={`${a.classe}||${a.materia}`} value={`${a.classe}||${a.materia}`}>
+                      {a.classe} — {a.materia}
+                    </option>
                   ))}
                 </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Materia</label>
-                <input
-                  type="text"
-                  value={form.materia}
-                  onChange={(e) => setForm((f) => ({ ...f, materia: e.target.value }))}
-                  placeholder="es. Informatica"
-                  className="w-32 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                />
               </div>
             </div>
             <div>
@@ -323,7 +326,7 @@ export default function PercorsiPage() {
             <div className="flex items-center gap-2">
               <button
                 type="submit"
-                disabled={!form.titolo.trim() || !form.classe}
+                disabled={!form.titolo.trim() || !form.classe || !form.materia}
                 className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
                 {editingId ? 'Salva' : 'Crea percorso'}
@@ -340,24 +343,25 @@ export default function PercorsiPage() {
         </div>
       )}
 
-      {/* Percorsi grouped by class */}
-      {Object.entries(percorsiPerClasse).map(([classe, classPercorsi]) => {
-        if (classPercorsi.length === 0) return null
+      {/* Percorsi grouped by classe+materia */}
+      {Object.entries(percorsiPerAssegnazione).map(([key, groupPercorsi]) => {
+        if (groupPercorsi.length === 0) return null
+        const [groupClasse, groupMateria] = key.split('||')
         return (
-          <div key={classe} className="mb-8">
+          <div key={key} className="mb-8">
             <h2 className="text-lg font-semibold text-gray-700 mb-3 flex items-center gap-2">
               <span className="bg-gray-200 text-gray-700 px-2 py-0.5 rounded text-sm font-bold">
-                {classe}
+                {groupClasse}
               </span>
-              {assegnazioni.find((a) => a.classe === classe)?.materia && (
+              {groupMateria && (
                 <span className="text-sm font-normal text-gray-500">
-                  {assegnazioni.find((a) => a.classe === classe).materia}
+                  {groupMateria}
                 </span>
               )}
             </h2>
 
             <div className="space-y-3">
-              {classPercorsi.map((p) => (
+              {groupPercorsi.map((p) => (
                 <div
                   key={p.id}
                   className="bg-white rounded-lg border border-gray-200 overflow-hidden"
@@ -457,11 +461,11 @@ export default function PercorsiPage() {
                         onChange={(e) => setDuplicateClasse(e.target.value)}
                         className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                       >
-                        <option value="">Seleziona classe</option>
-                        {classiDisponibili
-                          .filter((c) => c !== p.classe)
-                          .map((c) => (
-                            <option key={c} value={c}>{c}</option>
+                        <option value="">Seleziona destinazione</option>
+                        {assegnazioniOrdinati
+                          .filter((a) => !(a.classe === p.classe && a.materia === (p.materia || '')))
+                          .map((a) => (
+                            <option key={`${a.classe}||${a.materia}`} value={`${a.classe}||${a.materia}`}>{a.classe} — {a.materia}</option>
                           ))}
                       </select>
                       <button

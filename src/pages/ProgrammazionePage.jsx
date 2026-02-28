@@ -54,6 +54,7 @@ export default function ProgrammazionePage() {
   const [distribuzioni, setDistribuzioni] = useState({})
   const [ricorrenze, setRicorrenze] = useState({})
   const [selectedClasse, setSelectedClasse] = useState(null)
+  const [selectedMateria, setSelectedMateria] = useState(null)
   const [loading, setLoading] = useState(true)
   const [distributing, setDistributing] = useState(false)
 
@@ -68,7 +69,10 @@ export default function ProgrammazionePage() {
     unsubs.push(onAssegnazioni(annoAttivo, (data) => {
       const active = data.filter((a) => a.attiva && !a.archiviata)
       setAssegnazioni(active)
-      if (!selectedClasse && active.length > 0) setSelectedClasse(active[0].classe)
+      if (!selectedClasse && active.length > 0) {
+        setSelectedClasse(active[0].classe)
+        setSelectedMateria(active[0].materia)
+      }
       setLoading(false)
     }))
     unsubs.push(onOrari(annoAttivo, setOrari))
@@ -79,8 +83,8 @@ export default function ProgrammazionePage() {
     return () => unsubs.forEach((u) => u())
   }, [annoAttivo])
 
-  // Load unita for percorsi of selected class
-  const classePercorsi = allPercorsi.filter((p) => p.classe === selectedClasse)
+  // Load unita for percorsi of selected class+materia
+  const classePercorsi = allPercorsi.filter((p) => p.classe === selectedClasse && p.materia === selectedMateria)
   useEffect(() => {
     if (classePercorsi.length === 0) return
     const unsubs = []
@@ -93,8 +97,9 @@ export default function ProgrammazionePage() {
   }, [classePercorsi.map((p) => p.id).join(',')])
 
   // ── Derived data ──
-  const classi = useMemo(
-    () => [...new Set(assegnazioni.map((a) => a.classe))].sort(),
+  // Assegnazioni as classe+materia tabs
+  const assegnazioniTabs = useMemo(
+    () => [...assegnazioni].sort((a, b) => a.classe.localeCompare(b.classe) || a.materia.localeCompare(b.materia)),
     [assegnazioni]
   )
 
@@ -452,18 +457,18 @@ export default function ProgrammazionePage() {
       {/* Header + class selector */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Programmazione</h1>
-        <div className="flex gap-1">
-          {classi.map((c) => (
+        <div className="flex flex-wrap gap-1">
+          {assegnazioniTabs.map((a) => (
             <button
-              key={c}
-              onClick={() => setSelectedClasse(c)}
+              key={`${a.classe}||${a.materia}`}
+              onClick={() => { setSelectedClasse(a.classe); setSelectedMateria(a.materia) }}
               className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                selectedClasse === c
+                selectedClasse === a.classe && selectedMateria === a.materia
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              {c}
+              {a.classe} — {a.materia}
             </button>
           ))}
         </div>
@@ -599,7 +604,7 @@ export default function ProgrammazionePage() {
           {/* Percorsi list (read-only) */}
           {classePercorsi.length === 0 && (
             <p className="text-sm text-gray-400 italic">
-              Nessun percorso per {selectedClasse}.{' '}
+              Nessun percorso per {selectedClasse} {selectedMateria}.{' '}
               <Link to="/percorsi" className="text-blue-500 hover:text-blue-700 not-italic">
                 Creane uno nella pagina Percorsi.
               </Link>
@@ -662,7 +667,7 @@ export default function ProgrammazionePage() {
               {!dataFineScuola
                 ? 'Configura la data di fine scuola nelle Impostazioni.'
                 : oreSettimanali === 0
-                  ? `Nessun orario definito per ${selectedClasse}.`
+                  ? `Nessun orario definito per ${selectedClasse} ${selectedMateria}.`
                   : 'Nessuna settimana disponibile.'}
             </div>
           ) : (

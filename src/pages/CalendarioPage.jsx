@@ -582,7 +582,7 @@ export default function CalendarioPage() {
                       <div className="mt-3 pt-3 border-t border-gray-200 space-y-3">
                         {/* Percorso selector */}
                         <PercorsoSelector
-                          percorsi={percorsi.filter((p) => p.classe === lez.classe)}
+                          percorsi={percorsi.filter((p) => p.classe === lez.classe && p.materia === lez.materia)}
                           percorsoId={editingLezione.percorsoId}
                           unitaId={editingLezione.unitaId}
                           onChange={({ percorsoId: pId, unitaId: uId, unitaTitolo }) => {

@@ -10,17 +10,19 @@ import {
   updateLezione,
   deleteLezione,
   onRicorrenze,
+  onVacanze,
 } from '../lib/firestore'
 import {
   STATO_LEZIONE,
   STATO_LEZIONE_SHORT,
   STATI_LEZIONE,
   GIORNI_LABEL,
+  TIPO_VACANZA_LABEL,
 } from '../lib/costanti'
 import PercorsoSelector from '../components/calendario/PercorsoSelector'
 import ConfirmDialog from '../components/common/ConfirmDialog'
 import { getWeekRange } from '../lib/settimane'
-import { format, addDays, isToday, isBefore, startOfDay } from 'date-fns'
+import { format, addDays, isToday, isBefore, startOfDay, parseISO } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Timestamp } from 'firebase/firestore'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -60,6 +62,7 @@ export default function CalendarioPage() {
   })
   const [submittingExtra, setSubmittingExtra] = useState(false)
   const [ricorrenze, setRicorrenzeState] = useState({})
+  const [vacanze, setVacanze] = useState([])
 
   const { start, end } = getWeekRange(weekOffset)
 
@@ -78,8 +81,9 @@ export default function CalendarioPage() {
     const unsub3 = onAssegnazioni(annoAttivo, setAssegnazioni)
     const unsub4 = onPercorsi(annoAttivo, setPercorsi)
     const unsub5 = onRicorrenze(setRicorrenzeState)
+    const unsub6 = onVacanze(annoAttivo, setVacanze)
 
-    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5() }
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6() }
   }, [annoAttivo, weekOffset])
 
   // Build day structure
@@ -106,13 +110,23 @@ export default function CalendarioPage() {
         .filter((o) => o.giorno === i)
         .sort((a, b) => a.oraInizio.localeCompare(b.oraInizio))
 
-      days.push({ index: i, date, dayStr, label: GIORNI_LABEL[i], lezioni: dayLezioni, expectedSlots })
+      // Check if this day is a vacanza/chiusura/assenza
+      const vacanza = vacanze.find((v) => dayStr >= v.dataInizio && dayStr <= v.dataFine) || null
+
+      days.push({ index: i, date, dayStr, label: GIORNI_LABEL[i], lezioni: dayLezioni, expectedSlots, vacanza })
     }
     return days
-  }, [start, lezioni, orari])
+  }, [start, lezioni, orari, vacanze])
 
   // School hours config
   const giornoLibero = annoConfig?.giornoLibero ?? null
+
+  // Check if a date falls within a vacanza/chiusura/assenza period
+  function isGiornoNonScolastico(dayStr) {
+    return vacanze.find((v) => {
+      return dayStr >= v.dataInizio && dayStr <= v.dataFine
+    }) || null
+  }
 
   // Generate lessons from timetable for the current week
   async function handleGenerate() {
@@ -130,6 +144,7 @@ export default function CalendarioPage() {
       })
     )
 
+    let skippedDays = 0
     const promises = []
     for (let i = 0; i < 6; i++) {
       // Skip giorno libero
@@ -137,6 +152,12 @@ export default function CalendarioPage() {
 
       const date = addDays(start, i)
       const dayStr = format(date, 'yyyy-MM-dd')
+
+      // Skip days that fall within vacanze/chiusure/assenze
+      if (isGiornoNonScolastico(dayStr)) {
+        skippedDays++
+        continue
+      }
       const slotsForDay = orari.filter((o) => o.giorno === i)
 
       for (const slot of slotsForDay) {
@@ -170,6 +191,9 @@ export default function CalendarioPage() {
 
     try {
       await Promise.all(promises)
+      if (skippedDays > 0) {
+        toast.info(`${skippedDays} giorn${skippedDays === 1 ? 'o saltato' : 'i saltati'} (vacanza/chiusura/assenza)`)
+      }
     } catch (err) {
       toast.error('Errore durante la generazione delle lezioni.')
     }
@@ -447,11 +471,11 @@ export default function CalendarioPage() {
 
       {/* Weekly grid */}
       <div className="space-y-4">
-        {giorniSettimana.map(({ index, date, label, lezioni: dayLezioni, expectedSlots }) => (
+        {giorniSettimana.map(({ index, date, label, lezioni: dayLezioni, expectedSlots, vacanza }) => (
           <div key={index}>
             <h3
               className={`text-sm font-semibold mb-2 ${
-                isToday(date) ? 'text-blue-600' : 'text-gray-500'
+                vacanza ? 'text-amber-600' : isToday(date) ? 'text-blue-600' : 'text-gray-500'
               }`}
             >
               {label} {format(date, 'd MMM', { locale: it })}
@@ -460,9 +484,16 @@ export default function CalendarioPage() {
                   Oggi
                 </span>
               )}
+              {vacanza && (
+                <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">
+                  {TIPO_VACANZA_LABEL[vacanza.tipo] || 'Non scolastico'}{vacanza.nome ? ` — ${vacanza.nome}` : ''}
+                </span>
+              )}
             </h3>
 
-            {dayLezioni.length === 0 && expectedSlots.length === 0 ? (
+            {vacanza && dayLezioni.length === 0 ? (
+              <p className="text-sm text-amber-500 pl-2 italic">Nessuna lezione (giorno non scolastico)</p>
+            ) : dayLezioni.length === 0 && expectedSlots.length === 0 ? (
               <p className="text-sm text-gray-400 pl-2">Nessuna lezione</p>
             ) : dayLezioni.length === 0 && expectedSlots.length > 0 ? (
               <p className="text-sm text-gray-400 pl-2 italic">

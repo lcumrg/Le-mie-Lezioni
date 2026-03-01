@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx'
 import {
   addAssegnazione,
   addOrario,
@@ -7,6 +6,12 @@ import {
   addVacanza,
   setRicorrenzeClasse,
 } from './firestore'
+
+let XLSX = null
+async function getXLSX() {
+  if (!XLSX) XLSX = await import('xlsx')
+  return XLSX
+}
 
 const GIORNI_MAP = {
   'lunedì': 0, 'lunedi': 0, 'lun': 0,
@@ -38,7 +43,7 @@ function num(val) {
  * YYYY-MM-DD (passthrough), and other common Italian date formats.
  * Returns empty string if conversion fails.
  */
-function parseDate(val) {
+async function parseDate(val) {
   if (!val && val !== 0) return ''
 
   // Already a Date object (XLSX sometimes returns these)
@@ -51,8 +56,8 @@ function parseDate(val) {
 
   // Excel serial number (number of days since 1899-12-30)
   if (typeof val === 'number' && val > 30000 && val < 100000) {
-    // Use XLSX utility to convert serial to date
-    const date = XLSX.SSF.parse_date_code(val)
+    const xlsx = await getXLSX()
+    const date = xlsx.SSF.parse_date_code(val)
     if (date) {
       const y = date.y
       const m = String(date.m).padStart(2, '0')
@@ -112,15 +117,16 @@ function padTime(val) {
 export function parseExcel(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
-        const wb = XLSX.read(e.target.result, { type: 'array' })
+        const xlsx = await getXLSX()
+        const wb = xlsx.read(e.target.result, { type: 'array' })
         const result = { classi: [], orario: [], percorsi: [], ricorrenze: [], vacanze: [] }
 
         // ── Classi e Materie ──
         const wsClassi = wb.Sheets['Classi e Materie']
         if (wsClassi) {
-          const rows = XLSX.utils.sheet_to_json(wsClassi)
+          const rows = xlsx.utils.sheet_to_json(wsClassi)
           for (const row of rows) {
             const classe = str(row['Classe'] || row['classe'])
             const materia = str(row['Materia'] || row['materia'])
@@ -133,7 +139,7 @@ export function parseExcel(file) {
         // ── Orario ──
         const wsOrario = wb.Sheets['Orario']
         if (wsOrario) {
-          const rows = XLSX.utils.sheet_to_json(wsOrario)
+          const rows = xlsx.utils.sheet_to_json(wsOrario)
           for (const row of rows) {
             const giorno = parseGiorno(row['Giorno'] || row['giorno'])
             const numeroOra = num(row['Ora'] || row['ora'] || row['NumeroOra'])
@@ -149,7 +155,7 @@ export function parseExcel(file) {
         // ── Percorsi e Unità ──
         const wsPercorsi = wb.Sheets['Percorsi e Unità'] || wb.Sheets['Percorsi e Unita']
         if (wsPercorsi) {
-          const rows = XLSX.utils.sheet_to_json(wsPercorsi)
+          const rows = xlsx.utils.sheet_to_json(wsPercorsi)
           for (const row of rows) {
             const classe = str(row['Classe'] || row['classe'])
             const percorso = str(row['Percorso'] || row['percorso'])
@@ -165,7 +171,7 @@ export function parseExcel(file) {
         // ── Ricorrenze ──
         const wsRic = wb.Sheets['Ricorrenze']
         if (wsRic) {
-          const rows = XLSX.utils.sheet_to_json(wsRic)
+          const rows = xlsx.utils.sheet_to_json(wsRic)
           for (const row of rows) {
             const classe = str(row['Classe'] || row['classe'])
             const giorno = parseGiorno(row['Giorno'] || row['giorno'])
@@ -180,13 +186,13 @@ export function parseExcel(file) {
         // ── Vacanze ──
         const wsVac = wb.Sheets['Vacanze']
         if (wsVac) {
-          const rows = XLSX.utils.sheet_to_json(wsVac, { raw: false, dateNF: 'yyyy-mm-dd' })
+          const rows = xlsx.utils.sheet_to_json(wsVac, { raw: false, dateNF: 'yyyy-mm-dd' })
           for (const row of rows) {
             const nome = str(row['Nome'] || row['nome'])
             const rawInizio = row['Data Inizio'] ?? row['DataInizio'] ?? row['data_inizio'] ?? row['inizio'] ?? ''
             const rawFine = row['Data Fine'] ?? row['DataFine'] ?? row['data_fine'] ?? row['fine'] ?? ''
-            const dataInizio = parseDate(rawInizio)
-            const dataFine = parseDate(rawFine) || dataInizio
+            const dataInizio = await parseDate(rawInizio)
+            const dataFine = (await parseDate(rawFine)) || dataInizio
             const tipo = str(row['Tipo'] || row['tipo']) || 'vacanza'
             if (nome && dataInizio) {
               result.vacanze.push({ nome, dataInizio, dataFine, tipo })

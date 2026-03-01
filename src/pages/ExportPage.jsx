@@ -1,13 +1,14 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
-import { STATO_UNITA, STATO_UNITA_LABEL, STATO_LEZIONE, GIORNI_LABEL, ORE_ROMAN } from '../lib/costanti'
+import { STATO_UNITA, STATO_UNITA_LABEL, STATO_LEZIONE, GIORNI_LABEL, ORE_ROMAN, TIPO_VACANZA_LABEL } from '../lib/costanti'
 import {
   onAssegnazioni,
   onOrari,
   onPercorsi,
   onUnita,
   onLezioni,
+  onVacanze,
 } from '../lib/firestore'
 import { getWeekRange } from '../lib/settimane'
 import { format, addDays } from 'date-fns'
@@ -23,6 +24,7 @@ export default function ExportPage() {
   const [allPercorsi, setAllPercorsi] = useState([])
   const [unitaByPercorso, setUnitaByPercorso] = useState({})
   const [lezioni, setLezioni] = useState([])
+  const [vacanze, setVacanze] = useState([])
   const [selectedClasse, setSelectedClasse] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('iniziale')
@@ -45,6 +47,7 @@ export default function ExportPage() {
     unsubs.push(onOrari(annoAttivo, setOrari))
     unsubs.push(onPercorsi(annoAttivo, (all) => setAllPercorsi(all)))
     unsubs.push(onLezioni(annoAttivo, setLezioni))
+    unsubs.push(onVacanze(annoAttivo, setVacanze))
     return () => unsubs.forEach((u) => u())
   }, [annoAttivo])
 
@@ -259,9 +262,19 @@ export default function ExportPage() {
     return map
   }, [lezioni, allPercorsi, unitaByPercorso, weekStart, weekEnd])
 
-  // Funzione per ottenere info slot (settimana selezionata, con fallback)
+  // Controlla se un giorno della settimana cade in una vacanza/assenza
+  function getVacanza(giorno) {
+    const dayStr = format(addDays(weekStart, giorno), 'yyyy-MM-dd')
+    return vacanze.find((v) => dayStr >= v.dataInizio && dayStr <= v.dataFine) || null
+  }
+
+  // Funzione per ottenere info slot (settimana selezionata, senza fallback nei giorni di vacanza)
   function getSlotInfo(classe, giorno, ora) {
-    return weekSlotContent[`${classe}-${giorno}-${ora}`] || classeFallback[classe] || null
+    const explicit = weekSlotContent[`${classe}-${giorno}-${ora}`]
+    if (explicit) return explicit
+    // Non mostrare il fallback nei giorni di vacanza/assenza
+    if (getVacanza(giorno)) return null
+    return classeFallback[classe] || null
   }
 
   // ── Helpers ──
@@ -311,6 +324,9 @@ export default function ExportPage() {
   .materia { font-size: 11px; color: #444; }
   .percorso { font-size: 10px; color: #2563eb; font-weight: 600; margin-top: 1px; }
   .unita { font-size: 9px; color: #666; }
+  .vacanza-header { background: #fffbeb !important; color: #b45309; }
+  .vacanza-header .vacanza-label { font-size: 9px; font-weight: normal; color: #d97706; }
+  .vacanza-cell { background: #fffbeb; opacity: 0.4; text-decoration: line-through; }
   @media print { body { margin: 10px; } @page { size: landscape; } }
 </style></head><body>
   <h1>Orario Settimanale</h1>
@@ -518,12 +534,18 @@ export default function ExportPage() {
                   <thead>
                     <tr className="bg-gray-50">
                       <th className="border border-gray-200 px-2 py-2 text-xs font-semibold text-gray-600 w-16">Ora</th>
-                      {allGiorni.map((g) => (
-                        <th key={g} className="border border-gray-200 px-2 py-2 text-xs font-semibold text-gray-600">
-                          <div>{GIORNI_LABEL[g]}</div>
-                          <div className="font-normal text-gray-400">{format(addDays(weekStart, g), 'd MMM', { locale: it })}</div>
-                        </th>
-                      ))}
+                      {allGiorni.map((g) => {
+                        const vacanza = getVacanza(g)
+                        return (
+                          <th key={g} className={`border border-gray-200 px-2 py-2 text-xs font-semibold ${vacanza ? 'bg-amber-50 text-amber-700' : 'text-gray-600'}`}>
+                            <div>{GIORNI_LABEL[g]}</div>
+                            <div className={`font-normal ${vacanza ? 'text-amber-500' : 'text-gray-400'}`}>{format(addDays(weekStart, g), 'd MMM', { locale: it })}</div>
+                            {vacanza && (
+                              <div className="font-normal text-[10px] text-amber-500 mt-0.5">{TIPO_VACANZA_LABEL[vacanza.tipo] || 'Non scol.'}</div>
+                            )}
+                          </th>
+                        )
+                      })}
                     </tr>
                   </thead>
                   <tbody>
@@ -543,10 +565,11 @@ export default function ExportPage() {
                           </td>
                           {allGiorni.map((g) => {
                             const slots = row[g]
+                            const vacanza = getVacanza(g)
                             return (
-                              <td key={g} className={`border border-gray-200 px-1.5 py-1.5 align-top ${slots.length > 0 ? 'text-gray-800' : 'text-gray-300 text-center'}`}>
+                              <td key={g} className={`border border-gray-200 px-1.5 py-1.5 align-top ${vacanza ? 'bg-amber-50/50' : ''} ${slots.length > 0 ? 'text-gray-800' : 'text-gray-300 text-center'}`}>
                                 {slots.length > 0 ? (
-                                  <div className="space-y-1.5">
+                                  <div className={`space-y-1.5 ${vacanza ? 'opacity-40 line-through' : ''}`}>
                                     {slots.map((slot) => {
                                       const info = getSlotInfo(slot.classe, g, row.ora)
                                       return (

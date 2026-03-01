@@ -9,6 +9,9 @@ import {
   onUnita,
   onLezioni,
 } from '../lib/firestore'
+import { getWeekRange } from '../lib/settimane'
+import { format, addDays } from 'date-fns'
+import { it } from 'date-fns/locale'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 
 export default function ExportPage() {
@@ -23,8 +26,10 @@ export default function ExportPage() {
   const [selectedClasse, setSelectedClasse] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('iniziale')
+  const [weekOffset, setWeekOffset] = useState(0)
 
   const giornoLibero = annoConfig?.giornoLibero ?? null
+  const { start: weekStart, end: weekEnd } = getWeekRange(weekOffset)
 
   // ── Load data ──
   useEffect(() => {
@@ -232,47 +237,31 @@ export default function ExportPage() {
     return map
   }, [allPercorsi, unitaByPercorso])
 
-  // ── Slot → Percorso/Unita lookup (global, keyed by classe-giorno-ora) ──
-  // Se una lezione ha percorsoId esplicito usa quello, altrimenti fallback della classe
-  const slotContent = useMemo(() => {
+  // ── Slot → Percorso/Unita lookup filtrato per settimana selezionata ──
+  const weekSlotContent = useMemo(() => {
     const map = {} // key: "classe-giorno-ora" → { percorso, unita }
-    const now = new Date()
-    now.setHours(0, 0, 0, 0)
-
-    // 1) Popola da lezioni con percorsoId esplicito
     for (const l of lezioni) {
       if (!l.percorsoId || l.giorno == null || !l.numeroOra) continue
-      const key = `${l.classe}-${l.giorno}-${l.numeroOra}`
-
       const d = l.data?.toDate ? l.data.toDate() : new Date(l.data)
-      const existing = map[key]
-
-      const isPianificataFutura = d >= now && l.stato === STATO_LEZIONE.PIANIFICATA
-      const existingIsFutura = existing?._isFutura
-
-      if (!existing || (isPianificataFutura && !existingIsFutura) ||
-          (isPianificataFutura === existingIsFutura && d > (existing._date || 0))) {
-        const percorso = allPercorsi.find((p) => p.id === l.percorsoId)
-        if (percorso) {
-          const unita = l.unitaId
-            ? (unitaByPercorso[l.percorsoId] || []).find((u) => u.id === l.unitaId)
-            : null
-          map[key] = {
-            percorso: percorso.titolo,
-            unita: unita?.titolo || null,
-            _date: d,
-            _isFutura: isPianificataFutura,
-            _explicit: true,
-          }
-        }
+      if (d < weekStart || d > weekEnd) continue
+      const key = `${l.classe}-${l.giorno}-${l.numeroOra}`
+      const percorso = allPercorsi.find((p) => p.id === l.percorsoId)
+      if (!percorso) continue
+      const unita = l.unitaId
+        ? (unitaByPercorso[l.percorsoId] || []).find((u) => u.id === l.unitaId)
+        : null
+      map[key] = {
+        percorso: percorso.titolo,
+        unita: unita?.titolo || null,
+        stato: l.stato,
       }
     }
     return map
-  }, [lezioni, allPercorsi, unitaByPercorso])
+  }, [lezioni, allPercorsi, unitaByPercorso, weekStart, weekEnd])
 
-  // Funzione per ottenere info slot (esplicita o fallback)
+  // Funzione per ottenere info slot (settimana selezionata, con fallback)
   function getSlotInfo(classe, giorno, ora) {
-    return slotContent[`${classe}-${giorno}-${ora}`] || classeFallback[classe] || null
+    return weekSlotContent[`${classe}-${giorno}-${ora}`] || classeFallback[classe] || null
   }
 
   // ── Helpers ──
@@ -297,6 +286,8 @@ export default function ExportPage() {
 
   const orarioPrintRef = useRef(null)
 
+  const weekLabel = `${format(weekStart, 'd MMM', { locale: it })} – ${format(weekEnd, 'd MMM yyyy', { locale: it })}`
+
   function handlePrintOrario() {
     const content = orarioPrintRef.current
     if (!content) return
@@ -306,7 +297,7 @@ export default function ExportPage() {
       return
     }
     printWindow.document.write(`<!DOCTYPE html>
-<html><head><title>Orario Settimanale - ${annoAttivo}</title>
+<html><head><title>Orario Settimanale - ${weekLabel}</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 24px; }
   h1 { font-size: 18px; margin-bottom: 4px; }
@@ -323,7 +314,7 @@ export default function ExportPage() {
   @media print { body { margin: 10px; } @page { size: landscape; } }
 </style></head><body>
   <h1>Orario Settimanale</h1>
-  <h2>Anno Scolastico ${annoAttivo}</h2>
+  <h2>${weekLabel} — Anno Scolastico ${annoAttivo}</h2>
   ${content.innerHTML}
   <script>window.print(); window.onafterprint = function() { window.close(); }<\/script>
 </body></html>`)
@@ -481,9 +472,33 @@ export default function ExportPage() {
       {activeTab === 'orario' && (
         <div>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <p className="text-sm text-gray-500">
-              Orario settimanale completo di tutte le classi, con percorso e unita in corso.
-            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setWeekOffset((o) => o - 1)}
+                className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setWeekOffset(0)}
+                className="px-2.5 py-1 text-xs font-medium rounded-lg hover:bg-gray-200 text-gray-700"
+              >
+                Oggi
+              </button>
+              <span className="text-sm font-medium text-gray-600 min-w-[170px] text-center">
+                {format(weekStart, 'd MMM', { locale: it })} – {format(weekEnd, 'd MMM yyyy', { locale: it })}
+              </span>
+              <button
+                onClick={() => setWeekOffset((o) => o + 1)}
+                className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
             <button
               onClick={handlePrintOrario}
               disabled={globalOrarioRows.length === 0}
@@ -505,7 +520,8 @@ export default function ExportPage() {
                       <th className="border border-gray-200 px-2 py-2 text-xs font-semibold text-gray-600 w-16">Ora</th>
                       {allGiorni.map((g) => (
                         <th key={g} className="border border-gray-200 px-2 py-2 text-xs font-semibold text-gray-600">
-                          {GIORNI_LABEL[g]}
+                          <div>{GIORNI_LABEL[g]}</div>
+                          <div className="font-normal text-gray-400">{format(addDays(weekStart, g), 'd MMM', { locale: it })}</div>
                         </th>
                       ))}
                     </tr>

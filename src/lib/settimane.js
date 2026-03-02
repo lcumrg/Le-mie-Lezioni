@@ -1,4 +1,4 @@
-import { startOfWeek, endOfWeek, isWithinInterval, parseISO } from 'date-fns'
+import { startOfWeek, endOfWeek, startOfDay, endOfDay, isWithinInterval, parseISO } from 'date-fns'
 
 /**
  * Given the config's settimane array and a date,
@@ -40,5 +40,19 @@ export function getWeekRange(offset = 0) {
   return {
     start: startOfWeek(shifted, { weekStartsOn: 1 }),
     end: endOfWeek(shifted, { weekStartsOn: 1 }),
+  }
+}
+
+/**
+ * Returns day boundaries for a given offset from today.
+ * offset = 0 → today, 1 → tomorrow, -1 → yesterday
+ */
+export function getDayRange(offset = 0) {
+  const now = new Date()
+  const shifted = new Date(now)
+  shifted.setDate(shifted.getDate() + offset)
+  return {
+    start: startOfDay(shifted),
+    end: endOfDay(shifted),
   }
 }

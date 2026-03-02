@@ -331,7 +331,7 @@ export default function DashboardPage() {
     <div className="max-w-6xl mx-auto">
       {/* Week header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Settimana</h1>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setWeekOffset((o) => o - 1)}

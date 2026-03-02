@@ -101,6 +101,13 @@ export default function Sidebar({ open, onClose }) {
             ))}
           </nav>
 
+          {/* Version info */}
+          <div className="px-4 py-2 border-t border-gray-200">
+            <p className="text-xs text-gray-400">
+              v{__APP_VERSION__} &middot; deploy {new Date(__BUILD_DATE__).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+
           {/* User section */}
           {user && (
             <div className="p-4 border-t border-gray-200">

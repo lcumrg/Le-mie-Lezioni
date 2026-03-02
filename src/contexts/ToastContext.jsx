@@ -11,13 +11,14 @@ let toastId = 0
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
 
-  const addToast = useCallback((message, type = 'info', duration = 4000) => {
+  const addToast = useCallback((message, type = 'info', duration = 4000, action = null) => {
     const id = ++toastId
-    setToasts((prev) => [...prev, { id, message, type }])
-    if (duration > 0) {
+    setToasts((prev) => [...prev, { id, message, type, action }])
+    const effectiveDuration = action ? Math.max(duration, 5000) : duration
+    if (effectiveDuration > 0) {
       setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id))
-      }, duration)
+      }, effectiveDuration)
     }
     return id
   }, [])
@@ -31,6 +32,7 @@ export function ToastProvider({ children }) {
     success: (msg, dur) => addToast(msg, 'success', dur),
     error: (msg, dur) => addToast(msg, 'error', dur ?? 6000),
     warning: (msg, dur) => addToast(msg, 'warning', dur),
+    action: (msg, { label, onClick }) => addToast(msg, 'success', 5000, { label, onClick }),
   }, [addToast])
 
   // Reassign as function with methods
@@ -39,6 +41,7 @@ export function ToastProvider({ children }) {
   toastFn.success = toast.success
   toastFn.error = toast.error
   toastFn.warning = toast.warning
+  toastFn.action = toast.action
 
   return (
     <ToastContext.Provider value={toastFn}>
@@ -76,6 +79,14 @@ function ToastContainer({ toasts, onRemove }) {
             <path strokeLinecap="round" strokeLinejoin="round" d={TOAST_ICONS[t.type] || TOAST_ICONS.info} />
           </svg>
           <span className="text-sm flex-1">{t.message}</span>
+          {t.action && (
+            <button
+              onClick={() => { t.action.onClick(); onRemove(t.id) }}
+              className="text-white font-semibold text-sm underline underline-offset-2 hover:text-white/90 shrink-0"
+            >
+              {t.action.label}
+            </button>
+          )}
           <button
             onClick={() => onRemove(t.id)}
             className="text-white/70 hover:text-white shrink-0"

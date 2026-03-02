@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
 import {
@@ -25,6 +26,7 @@ import { format, addDays, isToday, parseISO, startOfWeek, isBefore, isAfter } fr
 import { it } from 'date-fns/locale'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ConfirmDialog from '../components/common/ConfirmDialog'
+import StatoLegenda from '../components/common/StatoLegenda'
 
 const STATO_BADGE = {
   [STATO_LEZIONE.PIANIFICATA]: 'bg-blue-100 text-blue-700',
@@ -47,7 +49,9 @@ const STATO_CELL_BORDER = {
 export default function DashboardPage() {
   const { annoAttivo, annoConfig, loading: configLoading } = useApp()
   const toast = useToast()
+  const navigate = useNavigate()
   const [lezioni, setLezioni] = useState([])
+  const [updatingLezioni, setUpdatingLezioni] = useState(new Set())
   const [assegnazioni, setAssegnazioni] = useState([])
   const [orari, setOrari] = useState([])
   const [percorsi, setPercorsi] = useState([])
@@ -121,11 +125,21 @@ export default function DashboardPage() {
 
   // Status change handler
   async function handleStatoChange(lezioneId, nuovoStato) {
+    const prevStato = lezioni.find((l) => l.id === lezioneId)?.stato
+    setUpdatingLezioni((prev) => new Set(prev).add(lezioneId))
     try {
       await updateLezione(lezioneId, { stato: nuovoStato })
+      if (prevStato && prevStato !== nuovoStato) {
+        toast.action('Stato aggiornato', {
+          label: 'Annulla',
+          onClick: () => updateLezione(lezioneId, { stato: prevStato }),
+        })
+      }
     } catch (err) {
       console.error('Errore aggiornamento stato lezione:', err)
       toast.error('Errore nell\'aggiornamento dello stato della lezione')
+    } finally {
+      setUpdatingLezioni((prev) => { const s = new Set(prev); s.delete(lezioneId); return s })
     }
   }
 
@@ -270,20 +284,24 @@ export default function DashboardPage() {
             {lez.classe}
           </span>
           <div className="flex gap-0.5">
-            {STATI_LEZIONE.map((s) => (
-              <button
-                key={s}
-                onClick={(e) => { e.stopPropagation(); handleStatoChange(lez.id, s) }}
-                className={`w-6 h-6 rounded text-[11px] font-bold leading-none flex items-center justify-center transition-colors ${
-                  lez.stato === s
-                    ? STATO_BADGE[s]
-                    : 'bg-gray-100 text-gray-300 hover:bg-gray-200 hover:text-gray-500'
-                }`}
-                title={STATO_LEZIONE_LABEL[s]}
-              >
-                {STATO_LEZIONE_SHORT[s]}
-              </button>
-            ))}
+            {STATI_LEZIONE.map((s) => {
+              const isUpdating = updatingLezioni.has(lez.id)
+              return (
+                <button
+                  key={s}
+                  onClick={(e) => { e.stopPropagation(); handleStatoChange(lez.id, s) }}
+                  disabled={isUpdating}
+                  className={`w-6 h-6 rounded text-[11px] font-bold leading-none flex items-center justify-center transition-colors ${
+                    lez.stato === s
+                      ? STATO_BADGE[s]
+                      : 'bg-gray-100 text-gray-300 hover:bg-gray-200 hover:text-gray-500'
+                  } ${isUpdating ? 'opacity-50 pointer-events-none' : ''}`}
+                  title={STATO_LEZIONE_LABEL[s]}
+                >
+                  {STATO_LEZIONE_SHORT[s]}
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -450,24 +468,28 @@ export default function DashboardPage() {
 
                         {/* Status buttons */}
                         <div className="flex gap-1 shrink-0 self-center">
-                          {STATI_LEZIONE.map((s) => (
-                            <button
-                              key={s}
-                              onClick={() => handleStatoChange(lez.id, s)}
-                              className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all ${
-                                lez.stato === s
-                                  ? `${STATO_BADGE[s]} ring-2 ring-offset-1 ${
-                                      s === STATO_LEZIONE.PIANIFICATA ? 'ring-blue-300' :
-                                      s === STATO_LEZIONE.SVOLTA ? 'ring-green-300' :
-                                      'ring-red-300'
-                                    }`
-                                  : 'bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600'
-                              }`}
-                              title={STATO_LEZIONE_LABEL[s]}
-                            >
-                              {STATO_LEZIONE_SHORT[s]}
-                            </button>
-                          ))}
+                          {STATI_LEZIONE.map((s) => {
+                            const isUpdating = updatingLezioni.has(lez.id)
+                            return (
+                              <button
+                                key={s}
+                                onClick={() => handleStatoChange(lez.id, s)}
+                                disabled={isUpdating}
+                                className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all ${
+                                  lez.stato === s
+                                    ? `${STATO_BADGE[s]} ring-2 ring-offset-1 ${
+                                        s === STATO_LEZIONE.PIANIFICATA ? 'ring-blue-300' :
+                                        s === STATO_LEZIONE.SVOLTA ? 'ring-green-300' :
+                                        'ring-red-300'
+                                      }`
+                                    : 'bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600'
+                                } ${isUpdating ? 'opacity-50 pointer-events-none' : ''}`}
+                                title={STATO_LEZIONE_LABEL[s]}
+                              >
+                                {STATO_LEZIONE_SHORT[s]}
+                              </button>
+                            )
+                          })}
                         </div>
                       </div>
                     )
@@ -536,9 +558,10 @@ export default function DashboardPage() {
                       return (
                         <td
                           key={day.index}
+                          onClick={lez ? () => navigate('/calendario') : undefined}
                           className={`border-b border-r border-gray-200 last:border-r-0 p-0.5 align-top ${
                             day.vacanza ? 'bg-amber-50/30' : today && !lez ? 'bg-blue-50/20' : ''
-                          }`}
+                          } ${lez ? 'cursor-pointer hover:ring-2 hover:ring-blue-300 hover:ring-inset' : ''}`}
                           style={{ height: '5.5rem' }}
                         >
                           {lez ? (
@@ -556,25 +579,13 @@ export default function DashboardPage() {
           </div>
 
           {/* Legend */}
-          <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 flex flex-wrap items-center gap-4 text-[11px] text-gray-500">
-            <span className="flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-blue-100 border border-blue-200" /> {STATO_LEZIONE_SHORT[STATO_LEZIONE.PIANIFICATA]} = {STATO_LEZIONE_LABEL[STATO_LEZIONE.PIANIFICATA]}
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-green-100 border border-green-200" /> {STATO_LEZIONE_SHORT[STATO_LEZIONE.SVOLTA]} = {STATO_LEZIONE_LABEL[STATO_LEZIONE.SVOLTA]}
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-100 border border-red-200" /> {STATO_LEZIONE_SHORT[STATO_LEZIONE.SALTATA]} = {STATO_LEZIONE_LABEL[STATO_LEZIONE.SALTATA]}
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block w-1 h-2.5 rounded-sm bg-purple-400" /> = Percorso collegato
-            </span>
-            {giornoLibero !== null && (
+          <StatoLegenda
+            extra={giornoLibero !== null ? (
               <span className="ml-auto text-gray-400 italic">
                 {GIORNI_LABEL[giornoLibero]}: giorno libero
               </span>
-            )}
-          </div>
+            ) : null}
+          />
         </div>
       ) : (
         /* ── Fallback: list view ── */
@@ -635,19 +646,23 @@ export default function DashboardPage() {
                             )}
                           </div>
                           <div className="flex items-center gap-1.5">
-                            {STATI_LEZIONE.map((s) => (
-                              <button
-                                key={s}
-                                onClick={() => handleStatoChange(lez.id, s)}
-                                className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-colors min-w-[2rem] ${
-                                  lez.stato === s
-                                    ? STATO_BADGE[s]
-                                    : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                                }`}
-                              >
-                                {STATO_LEZIONE_SHORT[s]}
-                              </button>
-                            ))}
+                            {STATI_LEZIONE.map((s) => {
+                              const isUpdating = updatingLezioni.has(lez.id)
+                              return (
+                                <button
+                                  key={s}
+                                  onClick={() => handleStatoChange(lez.id, s)}
+                                  disabled={isUpdating}
+                                  className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-colors min-w-[2rem] ${
+                                    lez.stato === s
+                                      ? STATO_BADGE[s]
+                                      : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                  } ${isUpdating ? 'opacity-50 pointer-events-none' : ''}`}
+                                >
+                                  {STATO_LEZIONE_SHORT[s]}
+                                </button>
+                              )
+                            })}
                           </div>
                         </div>
                       </div>
@@ -670,7 +685,8 @@ export default function DashboardPage() {
             {oreRimanentiPerClasse.map(({ classe, materia, oreSettimana, totaleOre }) => (
               <div
                 key={`${classe}_${materia}`}
-                className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200"
+                onClick={() => navigate('/programmazione')}
+                className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300 transition-colors"
               >
                 <div>
                   <span className="text-sm font-bold text-gray-800">{classe}</span>
@@ -712,7 +728,7 @@ export default function DashboardPage() {
               const pct = totale > 0 ? Math.round((completate / totale) * 100) : 0
 
               return (
-                <div key={a.id} className="p-4 bg-white rounded-lg border border-gray-200">
+                <div key={a.id} onClick={() => navigate('/percorsi')} className="p-4 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300 transition-colors">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-gray-900">
                       {a.classe} — {a.materia}

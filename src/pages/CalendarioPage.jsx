@@ -15,6 +15,7 @@ import {
 import {
   STATO_LEZIONE,
   STATO_LEZIONE_SHORT,
+  STATO_LEZIONE_LABEL,
   STATI_LEZIONE,
   GIORNI_LABEL,
   TIPO_VACANZA_LABEL,
@@ -26,6 +27,7 @@ import { format, addDays, isToday, isBefore, startOfDay, parseISO } from 'date-f
 import { it } from 'date-fns/locale'
 import { Timestamp } from 'firebase/firestore'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import StatoLegenda from '../components/common/StatoLegenda'
 
 const STATO_COLORS = {
   [STATO_LEZIONE.PIANIFICATA]: 'bg-blue-50 border-blue-200',
@@ -43,6 +45,7 @@ export default function CalendarioPage() {
   const { annoAttivo, annoConfig, loading: configLoading } = useApp()
   const toast = useToast()
   const [lezioni, setLezioni] = useState([])
+  const [updatingLezioni, setUpdatingLezioni] = useState(new Set())
   const [orari, setOrari] = useState([])
   const [assegnazioni, setAssegnazioni] = useState([])
   const [percorsi, setPercorsi] = useState([])
@@ -207,10 +210,20 @@ export default function CalendarioPage() {
 
   // Update lesson status
   async function handleStatoChange(lezioneId, nuovoStato) {
+    const prevStato = lezioni.find((l) => l.id === lezioneId)?.stato
+    setUpdatingLezioni((prev) => new Set(prev).add(lezioneId))
     try {
       await updateLezione(lezioneId, { stato: nuovoStato })
+      if (prevStato && prevStato !== nuovoStato) {
+        toast.action('Stato aggiornato', {
+          label: 'Annulla',
+          onClick: () => updateLezione(lezioneId, { stato: prevStato }),
+        })
+      }
     } catch (err) {
       toast.error('Errore durante l\'aggiornamento dello stato.')
+    } finally {
+      setUpdatingLezioni((prev) => { const s = new Set(prev); s.delete(lezioneId); return s })
     }
   }
 
@@ -518,14 +531,6 @@ export default function CalendarioPage() {
                   </span>
                 )}
               </h3>
-              {!vacanza && dayLezioni.some((l) => l.stato === STATO_LEZIONE.PIANIFICATA) && (
-                <button
-                  onClick={() => handleMarkDaySvolte(dayLezioni)}
-                  className="px-2 py-0.5 text-[11px] font-medium text-green-700 bg-green-50 border border-green-200 rounded-full hover:bg-green-100 transition-colors"
-                >
-                  Segna tutte svolte
-                </button>
-              )}
             </div>
 
             {vacanza && dayLezioni.length === 0 ? (
@@ -578,19 +583,23 @@ export default function CalendarioPage() {
 
                       {/* Quick status buttons */}
                       <div className="flex items-center gap-1.5">
-                        {STATI_LEZIONE.map((s) => (
-                          <button
-                            key={s}
-                            onClick={() => handleStatoChange(lez.id, s)}
-                            className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-colors min-w-[2rem] ${
-                              lez.stato === s
-                                ? STATO_BADGE[s]
-                                : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                            }`}
-                          >
-                            {STATO_LEZIONE_SHORT[s]}
-                          </button>
-                        ))}
+                        {STATI_LEZIONE.map((s) => {
+                          const isUpdating = updatingLezioni.has(lez.id)
+                          return (
+                            <button
+                              key={s}
+                              onClick={() => handleStatoChange(lez.id, s)}
+                              disabled={isUpdating}
+                              className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-colors min-w-[2rem] ${
+                                lez.stato === s
+                                  ? STATO_BADGE[s]
+                                  : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                              } ${isUpdating ? 'opacity-50 pointer-events-none' : ''}`}
+                            >
+                              {STATO_LEZIONE_SHORT[s]}
+                            </button>
+                          )
+                        })}
                       </div>
 
                       {/* Edit button */}
@@ -695,6 +704,18 @@ export default function CalendarioPage() {
                     )}
                   </div>
                 ))}
+                {/* Segna tutte svolte — only for today or past days */}
+                {!vacanza && (isToday(date) || isBefore(date, new Date())) && dayLezioni.some((l) => l.stato === STATO_LEZIONE.PIANIFICATA) && (
+                  <button
+                    onClick={() => handleMarkDaySvolte(dayLezioni)}
+                    className="w-full py-2 bg-green-50 border border-green-200 text-green-700 rounded-lg font-medium text-sm hover:bg-green-100 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Segna tutte svolte
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -702,17 +723,8 @@ export default function CalendarioPage() {
       </div>
 
       {/* Legend */}
-      <div className="mt-8 flex items-center gap-4 text-xs text-gray-500">
-        <span>Stato:</span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded-full bg-blue-200" /> P = Pianificata
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded-full bg-green-200" /> S = Svolta
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded-full bg-red-200" /> X = Saltata
-        </span>
+      <div className="mt-8">
+        <StatoLegenda />
       </div>
 
       {/* Confirm delete dialog */}

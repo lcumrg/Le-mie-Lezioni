@@ -9,8 +9,7 @@ import LoadingSpinner from './components/common/LoadingSpinner'
 // Lazy-loaded pages
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const OggiPage = lazy(() => import('./pages/OggiPage'))
-const DashboardPage = lazy(() => import('./pages/DashboardPage'))
-const CalendarioPage = lazy(() => import('./pages/CalendarioPage'))
+const SettimanaPage = lazy(() => import('./pages/SettimanaPage'))
 const PercorsiPage = lazy(() => import('./pages/PercorsiPage'))
 const ProgrammazionePage = lazy(() => import('./pages/ProgrammazionePage'))
 const ArchivioPage = lazy(() => import('./pages/ArchivioPage'))
@@ -53,8 +52,7 @@ function AppRoutes() {
           }
         >
           <Route path="/" element={<OggiPage />} />
-          <Route path="/settimana" element={<DashboardPage />} />
-          <Route path="/calendario" element={<CalendarioPage />} />
+          <Route path="/settimana" element={<SettimanaPage />} />
           <Route path="/percorsi" element={<PercorsiPage />} />
           <Route path="/programmazione" element={<ProgrammazionePage />} />
           <Route path="/export" element={<ExportPage />} />

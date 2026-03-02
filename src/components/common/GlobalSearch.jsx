@@ -127,7 +127,7 @@ export default function GlobalSearch() {
             title: l.titolo || `Lezione ${l.data || ''}`,
             classe: l.classe || '',
             preview: truncateMatch(matchField, query),
-            route: '/calendario',
+            route: '/settimana',
           })
         }
       }

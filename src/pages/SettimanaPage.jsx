@@ -217,6 +217,15 @@ export default function SettimanaPage() {
     }
   }
 
+  // Quick save individual fields (for grid edit panel)
+  async function handleQuickSave(lezioneId, updates) {
+    try {
+      await updateLezione(lezioneId, updates)
+    } catch {
+      toast.error('Errore durante il salvataggio.')
+    }
+  }
+
   function handleDeleteLezione(id) {
     setConfirmDelete(id)
   }
@@ -466,6 +475,23 @@ export default function SettimanaPage() {
       {/* -- Grid view -- */}
       {viewMode === 'grid' && (
         <>
+          {/* Generate button for grid mode */}
+          {hasOreConfig && hasOrari && lezioni.length === 0 && (
+            <div className="mb-4 px-4 py-3 bg-badge-p border border-link/30 rounded-sm flex items-center justify-between gap-3">
+              <p className="text-sm text-link">
+                {generating ? 'Generazione lezioni in corso...' : 'Settimana senza lezioni.'}
+              </p>
+              {!generating && (
+                <button
+                  onClick={handleGenerate}
+                  className="px-4 py-1.5 bg-link text-white text-sm font-medium rounded-sm hover:bg-link/80 shrink-0"
+                >
+                  Genera da orario
+                </button>
+              )}
+            </div>
+          )}
+
           {hasOreConfig ? (
             <LessonGrid
               days={days}
@@ -475,7 +501,9 @@ export default function SettimanaPage() {
               unitaMap={unitaMap}
               updatingLezioni={updatingLezioni}
               onStatoChange={handleStatoChange}
-              onCellClick={(lez) => setViewMode('list')}
+              onQuickSave={handleQuickSave}
+              onDeleteLezione={handleDeleteLezione}
+              percorsi={percorsi}
               giornoLibero={giornoLibero}
             />
           ) : (

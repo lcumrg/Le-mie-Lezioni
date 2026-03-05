@@ -2,26 +2,38 @@
 export const STATO_LEZIONE = {
   PIANIFICATA: 'pianificata',
   SVOLTA: 'svolta',
+  PARZIALE: 'parziale',
   SALTATA: 'saltata',
 }
 
 export const STATO_LEZIONE_LABEL = {
   [STATO_LEZIONE.PIANIFICATA]: 'Pianificata',
   [STATO_LEZIONE.SVOLTA]: 'Svolta',
+  [STATO_LEZIONE.PARZIALE]: 'Parziale',
   [STATO_LEZIONE.SALTATA]: 'Saltata',
 }
 
 export const STATO_LEZIONE_SHORT = {
   [STATO_LEZIONE.PIANIFICATA]: 'P',
   [STATO_LEZIONE.SVOLTA]: 'S',
+  [STATO_LEZIONE.PARZIALE]: '½',
   [STATO_LEZIONE.SALTATA]: 'X',
 }
 
 export const STATI_LEZIONE = [
   STATO_LEZIONE.PIANIFICATA,
   STATO_LEZIONE.SVOLTA,
+  STATO_LEZIONE.PARZIALE,
   STATO_LEZIONE.SALTATA,
 ]
+
+// Ore effettive per stato (per conteggio ore)
+export const ORE_EFFETTIVE = {
+  [STATO_LEZIONE.PIANIFICATA]: 0,
+  [STATO_LEZIONE.SVOLTA]: 1,
+  [STATO_LEZIONE.PARZIALE]: 0.5,
+  [STATO_LEZIONE.SALTATA]: 0,
+}
 
 // ── Stati unita ──
 export const STATO_UNITA = {

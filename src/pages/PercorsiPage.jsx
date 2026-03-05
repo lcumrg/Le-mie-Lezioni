@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
 import {
@@ -17,6 +18,7 @@ import ConfirmDialog from '../components/common/ConfirmDialog'
 export default function PercorsiPage() {
   const { annoAttivo, loading: configLoading } = useApp()
   const toast = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [percorsi, setPercorsi] = useState([])
   const [assegnazioni, setAssegnazioni] = useState([])
   const [loading, setLoading] = useState(true)
@@ -37,6 +39,9 @@ export default function PercorsiPage() {
   const [editingNoteText, setEditingNoteText] = useState('')
   const [noteExpandedIds, setNoteExpandedIds] = useState(new Set())
 
+  // View mode
+  const [compact, setCompact] = useState(false)
+
   // Duplicate feature state
   const [duplicatingId, setDuplicatingId] = useState(null)
   const [duplicateClasse, setDuplicateClasse] = useState('')
@@ -56,6 +61,15 @@ export default function PercorsiPage() {
 
     return () => { unsub1(); unsub2() }
   }, [annoAttivo])
+
+  // Read ?expand= query param to auto-expand a percorso
+  useEffect(() => {
+    const expandParam = searchParams.get('expand')
+    if (expandParam && !loading) {
+      setExpandedId(expandParam)
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, loading])
 
   // ── Inline creation ──
   async function handleInlineCreate(e) {
@@ -228,7 +242,27 @@ export default function PercorsiPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold text-fg mb-4">Percorsi Didattici</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-bold text-fg">Percorsi Didattici</h1>
+        <div className="flex bg-overlay rounded-sm p-0.5 border border-edge-muted">
+          <button
+            onClick={() => setCompact(false)}
+            className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
+              !compact ? 'bg-surface text-fg' : 'text-fg-muted hover:text-fg'
+            }`}
+          >
+            Normale
+          </button>
+          <button
+            onClick={() => setCompact(true)}
+            className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
+              compact ? 'bg-surface text-fg' : 'text-fg-muted hover:text-fg'
+            }`}
+          >
+            Compatta
+          </button>
+        </div>
+      </div>
 
       {/* ── Inline creation row ── */}
       {assegnazioniOrdinati.length > 0 && (
@@ -271,19 +305,19 @@ export default function PercorsiPage() {
         if (groupPercorsi.length === 0) return null
         const [groupClasse, groupMateria] = key.split('||')
         return (
-          <div key={key} className="mb-8">
-            <h2 className="text-lg font-semibold text-fg mb-3 flex items-center gap-2">
-              <span className="bg-overlay text-fg px-2 py-0.5 rounded-sm text-sm font-bold">
+          <div key={key} className={compact ? 'mb-4' : 'mb-8'}>
+            <h2 className={`font-semibold text-fg flex items-center gap-2 ${compact ? 'text-sm mb-2' : 'text-lg mb-3'}`}>
+              <span className={`bg-overlay text-fg rounded-sm font-bold ${compact ? 'px-1.5 py-0 text-xs' : 'px-2 py-0.5 text-sm'}`}>
                 {groupClasse}
               </span>
               {groupMateria && (
-                <span className="text-sm font-normal text-fg-muted">
+                <span className={`font-normal text-fg-muted ${compact ? 'text-xs' : 'text-sm'}`}>
                   {groupMateria}
                 </span>
               )}
             </h2>
 
-            <div className="space-y-3">
+            <div className={compact ? 'space-y-1' : 'space-y-3'}>
               {groupPercorsi.map((p) => (
                 <div
                   key={p.id}
@@ -291,7 +325,7 @@ export default function PercorsiPage() {
                 >
                   {/* Percorso header */}
                   <div
-                    className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-overlay"
+                    className={`flex items-center gap-3 cursor-pointer hover:bg-overlay ${compact ? 'px-3 py-1.5' : 'px-4 py-3'}`}
                     onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
                   >
                     {/* Expand arrow */}
@@ -325,7 +359,7 @@ export default function PercorsiPage() {
                         />
                       ) : (
                         <h3
-                          className="text-sm font-semibold text-fg cursor-text"
+                          className={`font-semibold text-fg cursor-text ${compact ? 'text-xs' : 'text-sm'}`}
                           onDoubleClick={(e) => { e.stopPropagation(); startFieldEdit(p, 'titolo') }}
                         >
                           {p.titolo}
@@ -347,14 +381,14 @@ export default function PercorsiPage() {
                           className="w-full px-1 py-0 mt-0.5 border-b border-link bg-transparent text-xs text-fg-muted outline-none placeholder:text-fg-subtle"
                           autoFocus
                         />
-                      ) : (
+                      ) : !compact ? (
                         <p
                           className="text-xs text-fg-muted truncate cursor-text"
                           onDoubleClick={(e) => { e.stopPropagation(); startFieldEdit(p, 'descrizione') }}
                         >
                           {p.descrizione || <span className="text-fg-subtle italic">doppio click per aggiungere descrizione</span>}
                         </p>
-                      )}
+                      ) : null}
                       {/* Note indicator */}
                       {p.note && (
                         <button

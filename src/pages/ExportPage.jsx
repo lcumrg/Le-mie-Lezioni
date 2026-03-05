@@ -134,17 +134,19 @@ export default function ExportPage() {
     const orePerUnita = {}
     const lezioniPerPercorso = {}
     for (const l of classeLezioni) {
-      if (l.stato === STATO_LEZIONE.SVOLTA) {
+      if (l.stato === STATO_LEZIONE.SVOLTA || l.stato === STATO_LEZIONE.PARZIALE) {
+        const oreEffettive = l.stato === STATO_LEZIONE.PARZIALE ? (l.ore || 1) * 0.5 : (l.ore || 1)
         if (l.unitaId) {
-          orePerUnita[l.unitaId] = (orePerUnita[l.unitaId] || 0) + (l.ore || 1)
+          orePerUnita[l.unitaId] = (orePerUnita[l.unitaId] || 0) + oreEffettive
         }
         if (l.percorsoId) {
-          lezioniPerPercorso[l.percorsoId] = (lezioniPerPercorso[l.percorsoId] || 0) + (l.ore || 1)
+          lezioniPerPercorso[l.percorsoId] = (lezioniPerPercorso[l.percorsoId] || 0) + oreEffettive
         }
       }
     }
 
     const lezioniSvolte = classeLezioni.filter((l) => l.stato === STATO_LEZIONE.SVOLTA).length
+    const lezioniParziali = classeLezioni.filter((l) => l.stato === STATO_LEZIONE.PARZIALE).length
     const lezioniSaltate = classeLezioni.filter((l) => l.stato === STATO_LEZIONE.SALTATA).length
 
     const lines = []
@@ -191,6 +193,7 @@ export default function ExportPage() {
     lines.push(`  Ore totali previste: ${orePrevisteTotali}`)
     lines.push(`  Ore totali effettuate: ${oreSvolteTotali}`)
     lines.push(`  Lezioni svolte: ${lezioniSvolte}`)
+    if (lezioniParziali > 0) lines.push(`  Lezioni parziali: ${lezioniParziali}`)
     lines.push(`  Lezioni saltate: ${lezioniSaltate}`)
     if (orePrevisteTotali > 0) {
       const percentuale = Math.round((oreSvolteTotali / orePrevisteTotali) * 100)

@@ -14,12 +14,14 @@ import LessonEditPanel from './LessonEditPanel'
 const STATO_COLORS = {
   [STATO_LEZIONE.PIANIFICATA]: 'bg-badge-p border-link/30',
   [STATO_LEZIONE.SVOLTA]: 'bg-badge-s border-accent/30',
+  [STATO_LEZIONE.PARZIALE]: 'bg-badge-h border-warn/30',
   [STATO_LEZIONE.SALTATA]: 'bg-badge-x border-danger/30',
 }
 
 const STATO_BADGE = {
   [STATO_LEZIONE.PIANIFICATA]: 'bg-badge-p text-link ring-1 ring-link/40',
   [STATO_LEZIONE.SVOLTA]: 'bg-badge-s text-accent ring-1 ring-accent/40',
+  [STATO_LEZIONE.PARZIALE]: 'bg-badge-h text-warn ring-1 ring-warn/40',
   [STATO_LEZIONE.SALTATA]: 'bg-badge-x text-danger ring-1 ring-danger/40',
 }
 

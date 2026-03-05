@@ -7,6 +7,7 @@ import {
 const LEGEND_ITEMS = [
   { stato: STATO_LEZIONE.PIANIFICATA, bg: 'bg-badge-p', border: 'border-link/30' },
   { stato: STATO_LEZIONE.SVOLTA, bg: 'bg-badge-s', border: 'border-accent/30' },
+  { stato: STATO_LEZIONE.PARZIALE, bg: 'bg-badge-h', border: 'border-warn/30' },
   { stato: STATO_LEZIONE.SALTATA, bg: 'bg-badge-x', border: 'border-danger/30' },
 ]
 

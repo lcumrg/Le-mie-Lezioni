@@ -30,9 +30,9 @@ export default function QuickNote({ value, onSave, placeholder = 'Aggiungi nota.
   function handleChange(e) {
     const val = e.target.value
     setText(val)
-    // Debounce auto-save after 2s of inactivity
+    // Debounce auto-save after 1s of inactivity
     clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => save(val), 2000)
+    debounceRef.current = setTimeout(() => save(val), 1000)
   }
 
   function handleBlur() {

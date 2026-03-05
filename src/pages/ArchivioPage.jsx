@@ -105,8 +105,8 @@ export default function ArchivioPage() {
     const percLezioni = lezioni.filter((l) => l.percorsoId === percorsoId)
     const orePreviste = unita.reduce((s, u) => s + (u.orePreviste || 0), 0)
     const oreSvolte = percLezioni
-      .filter((l) => l.stato === STATO_LEZIONE.SVOLTA)
-      .reduce((s, l) => s + (l.ore || 1), 0)
+      .filter((l) => l.stato === STATO_LEZIONE.SVOLTA || l.stato === STATO_LEZIONE.PARZIALE)
+      .reduce((s, l) => s + (l.stato === STATO_LEZIONE.PARZIALE ? (l.ore || 1) * 0.5 : (l.ore || 1)), 0)
     const unitaCompletate = unita.filter((u) => u.stato === STATO_UNITA.COMPLETATA).length
 
     return { unita, orePreviste, oreSvolte, unitaCompletate, totaleUnita: unita.length }
@@ -117,10 +117,11 @@ export default function ArchivioPage() {
     const totPercorsi = percorsi.length
     const totLezioni = lezioni.length
     const lezioniSvolte = lezioni.filter((l) => l.stato === STATO_LEZIONE.SVOLTA).length
+    const lezioniParziali = lezioni.filter((l) => l.stato === STATO_LEZIONE.PARZIALE).length
     const lezioniSaltate = lezioni.filter((l) => l.stato === STATO_LEZIONE.SALTATA).length
     const classi = [...new Set(assegnazioni.map((a) => a.classe))].length
 
-    return { totPercorsi, totLezioni, lezioniSvolte, lezioniSaltate, classi }
+    return { totPercorsi, totLezioni, lezioniSvolte, lezioniParziali, lezioniSaltate, classi }
   }
 
   // Group percorsi by classe
@@ -231,6 +232,12 @@ export default function ArchivioPage() {
                         <p className="text-2xl font-bold text-accent">{stats.lezioniSvolte}</p>
                         <p className="text-xs text-fg-muted">Svolte</p>
                       </div>
+                      {stats.lezioniParziali > 0 && (
+                        <div>
+                          <p className="text-2xl font-bold text-warn">{stats.lezioniParziali}</p>
+                          <p className="text-xs text-fg-muted">Parziali</p>
+                        </div>
+                      )}
                       <div>
                         <p className="text-2xl font-bold text-danger">{stats.lezioniSaltate}</p>
                         <p className="text-xs text-fg-muted">Saltate</p>
@@ -336,9 +343,9 @@ export default function ArchivioPage() {
                                   <div className="space-y-1.5">
                                     {stats.unita.map((u, idx) => {
                                       const unitLezioni = lezioni.filter(
-                                        (l) => l.unitaId === u.id && l.stato === STATO_LEZIONE.SVOLTA
+                                        (l) => l.unitaId === u.id && (l.stato === STATO_LEZIONE.SVOLTA || l.stato === STATO_LEZIONE.PARZIALE)
                                       )
-                                      const unitOre = unitLezioni.reduce((s, l) => s + (l.ore || 1), 0)
+                                      const unitOre = unitLezioni.reduce((s, l) => s + (l.stato === STATO_LEZIONE.PARZIALE ? (l.ore || 1) * 0.5 : (l.ore || 1)), 0)
 
                                       return (
                                         <div key={u.id} className="flex items-center gap-2 text-xs">

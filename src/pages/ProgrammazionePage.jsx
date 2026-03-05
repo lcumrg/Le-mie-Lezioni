@@ -497,7 +497,11 @@ export default function ProgrammazionePage() {
             </div>
             <div className="text-xs text-fg-muted">Bilancio ore</div>
             <div className="text-[10px] text-fg-subtle">
-              {bilancioOre >= 0 ? 'margine' : 'ore mancanti'}
+              {bilancioOre > 0
+                ? `Hai ${bilancioOre} ore di margine`
+                : bilancioOre === 0
+                  ? 'Perfettamente bilanciato'
+                  : `Mancano ${Math.abs(bilancioOre)} ore`}
             </div>
           </div>
         </div>
@@ -615,15 +619,30 @@ export default function ProgrammazionePage() {
             const units = (unitaByPercorso[p.id] || []).slice().sort((a, b) => (a.ordine || 0) - (b.ordine || 0))
             const color = percorsoColorMap[p.id] || PERCORSO_COLORS[0]
             const totOre = units.reduce((s, u) => s + (u.orePreviste || 0), 0)
+            const completate = units.filter((u) => u.stato === STATO_UNITA.COMPLETATA).length
+            const inCorso = units.filter((u) => u.stato === STATO_UNITA.IN_CORSO).length
+            const pct = units.length > 0 ? Math.round((completate / units.length) * 100) : 0
 
             return (
               <div key={p.id} className={`rounded-sm border ${color.border} overflow-hidden`}>
                 {/* Percorso header */}
-                <div className={`px-3 py-2 ${color.bg} flex items-center justify-between`}>
-                  <div>
-                    <span className={`text-sm font-semibold ${color.text}`}>{p.titolo}</span>
-                    <span className="text-xs text-fg-muted ml-2 font-mono">{totOre}h</span>
+                <div className={`px-3 py-2 ${color.bg}`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className={`text-sm font-semibold ${color.text}`}>{p.titolo}</span>
+                      <span className="text-xs text-fg-muted ml-2 font-mono">{totOre}h</span>
+                    </div>
+                    <span className="text-xs text-fg-muted font-mono">
+                      {completate}/{units.length}
+                      {inCorso > 0 && <span className="text-warn ml-1">({inCorso} in corso)</span>}
+                    </span>
                   </div>
+                  {/* Progress bar */}
+                  {units.length > 0 && (
+                    <div className="mt-1.5 h-1.5 bg-edge-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                  )}
                 </div>
 
                 {/* Unita list (read-only) */}

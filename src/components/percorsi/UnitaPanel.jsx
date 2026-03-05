@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState, useRef } from 'react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
@@ -19,15 +19,15 @@ import { useToast } from '../../contexts/ToastContext'
 import ConfirmDialog from '../common/ConfirmDialog'
 
 const STATO_COLORS = {
-  [STATO_UNITA.DA_FARE]: 'bg-gray-100 text-gray-600',
-  [STATO_UNITA.IN_CORSO]: 'bg-yellow-100 text-yellow-700',
-  [STATO_UNITA.COMPLETATA]: 'bg-green-100 text-green-700',
+  [STATO_UNITA.DA_FARE]: 'bg-overlay text-fg-muted',
+  [STATO_UNITA.IN_CORSO]: 'bg-badge-warn text-warn',
+  [STATO_UNITA.COMPLETATA]: 'bg-badge-s text-accent',
 }
 
 const STATO_LEZ_COLORS = {
-  [STATO_LEZIONE.PIANIFICATA]: 'bg-blue-100 text-blue-700',
-  [STATO_LEZIONE.SVOLTA]: 'bg-green-100 text-green-700',
-  [STATO_LEZIONE.SALTATA]: 'bg-red-100 text-red-700',
+  [STATO_LEZIONE.PIANIFICATA]: 'bg-badge-p text-link',
+  [STATO_LEZIONE.SVOLTA]: 'bg-badge-s text-accent',
+  [STATO_LEZIONE.SALTATA]: 'bg-badge-x text-danger',
 }
 
 export default function UnitaPanel({ percorso }) {
@@ -35,21 +35,20 @@ export default function UnitaPanel({ percorso }) {
 
   const [unita, setUnita] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
 
-  // Confirm dialog state
-  const [confirmDelete, setConfirmDelete] = useState(null) // unitaId
-  const [confirmRemoveMat, setConfirmRemoveMat] = useState(null) // { unitaId, matIndex }
+  // Inline editing state
+  const [editingCell, setEditingCell] = useState(null) // { id, field }
+  const [editingValue, setEditingValue] = useState('')
 
-  // Form state
-  const [form, setForm] = useState({
-    titolo: '',
-    descrizione: '',
-    orePreviste: 1,
-    stato: STATO_UNITA.DA_FARE,
-  })
+  // New row state (the always-visible empty row at the bottom)
+  const [newTitolo, setNewTitolo] = useState('')
+  const [newOre, setNewOre] = useState('')
+  const newTitoloRef = useRef(null)
+
+  // Confirm dialog state
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [confirmRemoveMat, setConfirmRemoveMat] = useState(null)
 
   // Material form
   const [matForm, setMatForm] = useState({ tipo: 'link', titolo: '', url: '', testo: '' })
@@ -66,69 +65,102 @@ export default function UnitaPanel({ percorso }) {
     return () => { unsub1(); unsub2() }
   }, [percorso.id])
 
-  function resetForm() {
-    setForm({ titolo: '', descrizione: '', orePreviste: 1, stato: STATO_UNITA.DA_FARE })
-    setShowForm(false)
-    setEditingId(null)
+  // ── Inline editing ──
+  function startEdit(unitaId, field, currentValue) {
+    setEditingCell({ id: unitaId, field })
+    setEditingValue(String(currentValue ?? ''))
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (!form.titolo.trim()) return
+  async function saveEdit() {
+    if (!editingCell) return
+    const { id, field } = editingCell
+    const u = unita.find((x) => x.id === id)
+    if (!u) { setEditingCell(null); return }
 
-    try {
-      if (editingId) {
-        await updateUnita(percorso.id, editingId, {
-          titolo: form.titolo.trim(),
-          descrizione: form.descrizione.trim(),
-          orePreviste: Number(form.orePreviste),
-          stato: form.stato,
-        })
-      } else {
-        const maxOrdine = unita.length > 0 ? Math.max(...unita.map((u) => u.ordine || 0)) : 0
-        await addUnita(percorso.id, {
-          titolo: form.titolo.trim(),
-          descrizione: form.descrizione.trim(),
-          ordine: maxOrdine + 1,
-          orePreviste: Number(form.orePreviste),
-          stato: STATO_UNITA.DA_FARE,
-          materiali: [],
-        })
+    let value = editingValue
+    if (field === 'orePreviste') {
+      value = Math.max(0, parseInt(value) || 0)
+    } else {
+      value = value.trim()
+    }
+
+    const currentVal = field === 'orePreviste' ? (u.orePreviste || 0) : (u[field] || '')
+    if (value !== currentVal) {
+      try {
+        await updateUnita(percorso.id, id, { [field]: value })
+      } catch (err) {
+        toast.error('Errore durante il salvataggio.')
       }
-      resetForm()
-    } catch (err) {
-      toast.error('Errore durante il salvataggio dell\'unita.')
+    }
+    setEditingCell(null)
+  }
+
+  function handleEditKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      saveEdit()
+    }
+    if (e.key === 'Escape') {
+      setEditingCell(null)
+    }
+    if (e.key === 'Tab') {
+      e.preventDefault()
+      saveEdit()
+      // Move to next editable field
+      if (editingCell) {
+        const { id, field } = editingCell
+        const idx = unita.findIndex((u) => u.id === id)
+        if (field === 'titolo') {
+          startEdit(id, 'orePreviste', unita[idx]?.orePreviste || 0)
+        } else if (field === 'orePreviste' && idx < unita.length - 1) {
+          const next = unita[idx + 1]
+          startEdit(next.id, 'titolo', next.titolo)
+        } else {
+          // Tab from last ore field → focus new row
+          setTimeout(() => newTitoloRef.current?.focus(), 0)
+        }
+      }
     }
   }
 
-  function startEdit(u) {
-    setForm({
-      titolo: u.titolo,
-      descrizione: u.descrizione || '',
-      orePreviste: u.orePreviste || 1,
-      stato: u.stato || STATO_UNITA.DA_FARE,
-    })
-    setEditingId(u.id)
-    setShowForm(true)
-  }
+  // ── New row ──
+  async function handleAddRow(e) {
+    e?.preventDefault()
+    const titolo = newTitolo.trim()
+    if (!titolo) return
 
-  async function handleDelete(unitaId) {
+    const maxOrdine = unita.length > 0 ? Math.max(...unita.map((u) => u.ordine || 0)) : 0
     try {
-      await deleteUnita(percorso.id, unitaId)
-      if (editingId === unitaId) resetForm()
+      await addUnita(percorso.id, {
+        titolo,
+        descrizione: '',
+        ordine: maxOrdine + 1,
+        orePreviste: parseInt(newOre) || 1,
+        stato: STATO_UNITA.DA_FARE,
+        materiali: [],
+      })
+      setNewTitolo('')
+      setNewOre('')
+      // Keep focus on the new row for serial creation
+      setTimeout(() => newTitoloRef.current?.focus(), 0)
     } catch (err) {
-      toast.error('Errore durante l\'eliminazione dell\'unita.')
+      toast.error('Errore durante l\'aggiunta dell\'unita.')
     }
   }
 
-  async function handleStatoChange(unitaId, nuovoStato) {
+  // ── Status change ──
+  async function handleStatoChange(unitaId) {
+    const u = unita.find((x) => x.id === unitaId)
+    if (!u) return
+    const next = STATO_UNITA_NEXT[u.stato] || STATO_UNITA.DA_FARE
     try {
-      await updateUnita(percorso.id, unitaId, { stato: nuovoStato })
+      await updateUnita(percorso.id, unitaId, { stato: next })
     } catch (err) {
       toast.error('Errore durante l\'aggiornamento dello stato.')
     }
   }
 
+  // ── Reorder ──
   async function handleMove(unitaId, direction) {
     const idx = unita.findIndex((u) => u.id === unitaId)
     if (idx < 0) return
@@ -144,11 +176,20 @@ export default function UnitaPanel({ percorso }) {
         updateUnita(percorso.id, unita[swapIdx].id, { ordine: currentOrdine }),
       ])
     } catch (err) {
-      toast.error('Errore durante lo spostamento dell\'unita.')
+      toast.error('Errore durante lo spostamento.')
     }
   }
 
-  // Materials management
+  // ── Delete ──
+  async function handleDelete(unitaId) {
+    try {
+      await deleteUnita(percorso.id, unitaId)
+    } catch (err) {
+      toast.error('Errore durante l\'eliminazione dell\'unita.')
+    }
+  }
+
+  // ── Materials ──
   async function handleAddMaterial(unitaId) {
     const u = unita.find((x) => x.id === unitaId)
     if (!u) return
@@ -181,7 +222,7 @@ export default function UnitaPanel({ percorso }) {
     }
   }
 
-  // Helper: get linked lessons for a specific unit
+  // ── Helpers ──
   function lezioniPerUnita(unitaId) {
     return lezioniCollegate
       .filter((l) => l.unitaId === unitaId)
@@ -197,384 +238,392 @@ export default function UnitaPanel({ percorso }) {
   const completate = unita.filter((u) => u.stato === STATO_UNITA.COMPLETATA).length
   const pct = totale > 0 ? Math.round((completate / totale) * 100) : 0
   const oreTotali = unita.reduce((s, u) => s + (u.orePreviste || 0), 0)
-  const oreCompletate = unita
-    .filter((u) => u.stato === STATO_UNITA.COMPLETATA)
-    .reduce((s, u) => s + (u.orePreviste || 0), 0)
   const oreReali = lezioniCollegate
     .filter((l) => l.stato === STATO_LEZIONE.SVOLTA)
     .reduce((s, l) => s + (l.ore || 0), 0)
 
   if (loading) {
-    return <p className="text-sm text-gray-400 py-4">Caricamento unita...</p>
+    return <p className="text-sm text-fg-subtle py-4">Caricamento unita...</p>
   }
 
   return (
-    <div className="space-y-4">
-      {/* Confirm dialog: delete unita */}
+    <div className="space-y-3">
+      {/* Confirm dialogs */}
       <ConfirmDialog
         open={confirmDelete !== null}
         title="Elimina unita"
         message="Sei sicuro di voler eliminare questa unita? L'operazione non e reversibile."
         confirmText="Elimina"
         danger
-        onConfirm={() => {
-          handleDelete(confirmDelete)
-          setConfirmDelete(null)
-        }}
+        onConfirm={() => { handleDelete(confirmDelete); setConfirmDelete(null) }}
         onCancel={() => setConfirmDelete(null)}
       />
-
-      {/* Confirm dialog: remove material */}
       <ConfirmDialog
         open={confirmRemoveMat !== null}
         title="Rimuovi materiale"
         message="Sei sicuro di voler rimuovere questo materiale?"
         confirmText="Rimuovi"
         danger
-        onConfirm={() => {
-          handleRemoveMaterial(confirmRemoveMat.unitaId, confirmRemoveMat.matIndex)
-          setConfirmRemoveMat(null)
-        }}
+        onConfirm={() => { handleRemoveMaterial(confirmRemoveMat.unitaId, confirmRemoveMat.matIndex); setConfirmRemoveMat(null) }}
         onCancel={() => setConfirmRemoveMat(null)}
       />
 
       {/* Progress bar */}
       {totale > 0 && (
         <div className="flex items-center gap-3">
-          <div className="flex-1 bg-gray-200 rounded-full h-2">
+          <div className="flex-1 bg-edge-muted rounded-full h-2">
             <div
-              className="bg-green-500 h-2 rounded-full transition-all"
+              className="bg-accent h-2 rounded-full transition-all"
               style={{ width: `${pct}%` }}
             />
           </div>
-          <span className="text-xs text-gray-500 shrink-0">
-            {completate}/{totale} unita · {oreReali}h svolte / {oreTotali}h previste
+          <span className="text-xs text-fg-muted shrink-0">
+            <span className="font-mono">{completate}/{totale}</span> unita · <span className="font-mono">{oreReali}h</span> svolte / <span className="font-mono">{oreTotali}h</span> previste
           </span>
         </div>
       )}
 
-      {/* Units list */}
-      <div className="space-y-2">
-        {unita.map((u, idx) => (
-          <div
-            key={u.id}
-            className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden"
-          >
-            {/* Unit header */}
-            <div className="flex items-center gap-2 px-3 py-2">
-              <span className="text-xs text-gray-400 font-mono w-6 shrink-0">
-                {idx + 1}.
-              </span>
+      {/* ── Spreadsheet table ── */}
+      <div className="border border-edge-muted rounded-sm overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-overlay text-xs text-fg-muted">
+              <th className="px-2 py-1.5 text-left w-8 font-medium">#</th>
+              <th className="px-2 py-1.5 text-left font-medium">Titolo</th>
+              <th className="px-2 py-1.5 text-center w-14 font-medium">Ore</th>
+              <th className="px-2 py-1.5 text-center w-24 font-medium">Stato</th>
+              <th className="px-2 py-1.5 text-right w-24 font-medium">Azioni</th>
+            </tr>
+          </thead>
+          <tbody>
+            {unita.map((u, idx) => {
+              const isEditing = editingCell?.id === u.id
+              const isExpanded = expandedId === u.id
+              const uLez = lezioniPerUnita(u.id)
+              const uOreReali = uLez.filter((l) => l.stato === STATO_LEZIONE.SVOLTA).reduce((s, l) => s + (l.ore || 0), 0)
 
-              {/* Status button */}
-              <button
-                onClick={() => {
-                  const next = STATO_UNITA_NEXT[u.stato] || STATO_UNITA.DA_FARE
-                  handleStatoChange(u.id, next)
-                }}
-                className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${STATO_COLORS[u.stato] || STATO_COLORS[STATO_UNITA.DA_FARE]}`}
-                title="Clicca per cambiare stato"
-              >
-                {STATO_UNITA_LABEL[u.stato] || STATO_UNITA_LABEL[STATO_UNITA.DA_FARE]}
-              </button>
+              return (
+                <Fragment key={u.id}>
+                  <tr className={`border-t border-edge-muted hover:bg-overlay/50 ${isExpanded ? 'bg-overlay/30' : ''}`}>
+                    {/* # */}
+                    <td className="px-2 py-1.5 text-fg-subtle font-mono text-xs">
+                      {idx + 1}
+                    </td>
 
-              {/* Title & description */}
-              <div
-                className="flex-1 min-w-0 cursor-pointer"
-                onClick={() => setExpandedId(expandedId === u.id ? null : u.id)}
-              >
-                <span className={`text-sm font-medium ${u.stato === STATO_UNITA.COMPLETATA ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-                  {u.titolo}
-                </span>
-                {u.descrizione && (
-                  <p className="text-xs text-gray-500 truncate">{u.descrizione}</p>
-                )}
-              </div>
-
-              {/* Hours: real / planned */}
-              {(() => {
-                const uLez = lezioniPerUnita(u.id)
-                const uOreReali = uLez.filter((l) => l.stato === STATO_LEZIONE.SVOLTA).reduce((s, l) => s + (l.ore || 0), 0)
-                return (
-                  <span className="text-xs text-gray-400 shrink-0">
-                    {uOreReali > 0 && <span className="text-green-600">{uOreReali}/</span>}
-                    {u.orePreviste || 0}h
-                  </span>
-                )
-              })()}
-
-              {/* Linked lessons count */}
-              {lezioniPerUnita(u.id).length > 0 && (
-                <span className="text-xs text-purple-500 shrink-0">
-                  {lezioniPerUnita(u.id).length} lez.
-                </span>
-              )}
-
-              {/* Materials count */}
-              {(u.materiali?.length || 0) > 0 && (
-                <span className="text-xs text-blue-500 shrink-0">
-                  {u.materiali.length} mat.
-                </span>
-              )}
-
-              {/* Move buttons */}
-              <button
-                onClick={() => handleMove(u.id, -1)}
-                disabled={idx === 0}
-                className="text-gray-300 hover:text-gray-500 disabled:opacity-30"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-                </svg>
-              </button>
-              <button
-                onClick={() => handleMove(u.id, 1)}
-                disabled={idx === unita.length - 1}
-                className="text-gray-300 hover:text-gray-500 disabled:opacity-30"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {/* Edit / Delete */}
-              <button
-                onClick={() => startEdit(u)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-              </button>
-              <button
-                onClick={() => setConfirmDelete(u.id)}
-                className="text-red-300 hover:text-red-500"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Expanded: linked lessons + materials */}
-            {expandedId === u.id && (
-              <div className="px-3 pb-3 pt-1 border-t border-gray-200 bg-white space-y-3">
-                {/* Linked lessons */}
-                {(() => {
-                  const uLez = lezioniPerUnita(u.id)
-                  if (uLez.length === 0) return null
-
-                  return (
-                    <div>
-                      <p className="text-xs font-medium text-gray-600 mb-1.5">
-                        Lezioni collegate ({uLez.length})
-                      </p>
-                      <div className="space-y-1">
-                        {uLez.map((l) => {
-                          const d = l.data?.toDate ? l.data.toDate() : new Date(l.data)
-                          return (
-                            <div key={l.id} className="flex items-center gap-2 text-xs">
-                              <span className="text-gray-500 font-mono w-20 shrink-0">
-                                {format(d, 'dd MMM yyyy', { locale: it })}
-                              </span>
-                              <span className="text-gray-400 w-16 shrink-0">
-                                {l.oraInizio}–{l.oraFine}
-                              </span>
-                              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${STATO_LEZ_COLORS[l.stato] || ''}`}>
-                                {STATO_LEZIONE_LABEL[l.stato] || STATO_LEZIONE_LABEL[STATO_LEZIONE.PIANIFICATA]}
-                              </span>
-                              <span className="text-gray-400">{l.ore || 0}h</span>
-                              {l.note && (
-                                <span className="text-gray-400 truncate flex-1 italic">
-                                  {l.note}
-                                </span>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )
-                })()}
-
-                <p className="text-xs font-medium text-gray-600 mb-2">Materiali</p>
-
-                {/* Existing materials */}
-                {(u.materiali || []).length > 0 ? (
-                  <div className="space-y-1 mb-3">
-                    {u.materiali.map((m, mi) => (
-                      <div key={mi} className="flex items-center gap-2 text-sm">
-                        {m.tipo === 'link' ? (
-                          <>
-                            <span className="text-blue-500 shrink-0">🔗</span>
-                            <a
-                              href={m.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline truncate flex-1"
-                            >
-                              {m.titolo || m.url}
-                            </a>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-gray-400 shrink-0">📝</span>
-                            <span className="text-gray-600 flex-1">{m.testo}</span>
-                          </>
-                        )}
-                        <button
-                          onClick={() => setConfirmRemoveMat({ unitaId: u.id, matIndex: mi })}
-                          className="text-red-300 hover:text-red-500 shrink-0"
+                    {/* Titolo (click to edit) */}
+                    <td
+                      className="px-2 py-1.5"
+                      onClick={() => !isEditing && setExpandedId(isExpanded ? null : u.id)}
+                    >
+                      {isEditing && editingCell.field === 'titolo' ? (
+                        <input
+                          type="text"
+                          value={editingValue}
+                          onChange={(e) => setEditingValue(e.target.value)}
+                          onBlur={saveEdit}
+                          onKeyDown={handleEditKeyDown}
+                          className="w-full px-1 py-0 border-b border-link bg-transparent text-sm text-fg outline-none"
+                          autoFocus
+                        />
+                      ) : (
+                        <div
+                          className={`cursor-text ${u.stato === STATO_UNITA.COMPLETATA ? 'line-through text-fg-subtle' : 'text-fg'}`}
+                          onDoubleClick={(e) => { e.stopPropagation(); startEdit(u.id, 'titolo', u.titolo) }}
                         >
-                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <span className="text-sm font-medium">{u.titolo}</span>
+                          {u.descrizione && (
+                            <span className="text-xs text-fg-muted ml-2">— {u.descrizione}</span>
+                          )}
+                          {(u.materiali?.length || 0) > 0 && (
+                            <span className="text-xs text-link ml-1">[{u.materiali.length} mat.]</span>
+                          )}
+                          {uLez.length > 0 && (
+                            <span className="text-xs text-special ml-1">[{uLez.length} lez.]</span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Ore (click to edit) */}
+                    <td className="px-2 py-1.5 text-center">
+                      {isEditing && editingCell.field === 'orePreviste' ? (
+                        <input
+                          type="number"
+                          min={0}
+                          max={99}
+                          value={editingValue}
+                          onChange={(e) => setEditingValue(e.target.value)}
+                          onBlur={saveEdit}
+                          onKeyDown={handleEditKeyDown}
+                          className="w-12 px-1 py-0 border-b border-link bg-transparent text-sm text-fg text-center outline-none font-mono"
+                          autoFocus
+                        />
+                      ) : (
+                        <span
+                          className="cursor-text font-mono text-xs text-fg-muted"
+                          onDoubleClick={() => startEdit(u.id, 'orePreviste', u.orePreviste || 0)}
+                        >
+                          {uOreReali > 0 && <span className="text-accent">{uOreReali}/</span>}
+                          {u.orePreviste || 0}h
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Stato (click to cycle) */}
+                    <td className="px-2 py-1.5 text-center">
+                      <button
+                        onClick={() => handleStatoChange(u.id)}
+                        className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATO_COLORS[u.stato] || STATO_COLORS[STATO_UNITA.DA_FARE]}`}
+                        title="Clicca per cambiare stato"
+                      >
+                        {STATO_UNITA_LABEL[u.stato] || STATO_UNITA_LABEL[STATO_UNITA.DA_FARE]}
+                      </button>
+                    </td>
+
+                    {/* Azioni */}
+                    <td className="px-2 py-1.5 text-right">
+                      <div className="flex items-center justify-end gap-0.5">
+                        <button
+                          onClick={() => handleMove(u.id, -1)}
+                          disabled={idx === 0}
+                          className="text-fg-subtle hover:text-fg-muted disabled:opacity-20 p-0.5"
+                          title="Sposta su"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => handleMove(u.id, 1)}
+                          disabled={idx === unita.length - 1}
+                          className="text-fg-subtle hover:text-fg-muted disabled:opacity-20 p-0.5"
+                          title="Sposta giu"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => setConfirmDelete(u.id)}
+                          className="text-danger/50 hover:text-danger p-0.5"
+                          title="Elimina"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                           </svg>
                         </button>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400 mb-3">Nessun materiale aggiunto.</p>
-                )}
+                    </td>
+                  </tr>
 
-                {/* Add material form */}
-                <div className="flex flex-wrap items-end gap-2">
-                  <select
-                    value={matForm.tipo}
-                    onChange={(e) => setMatForm((f) => ({ ...f, tipo: e.target.value }))}
-                    className="px-2 py-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 outline-none"
-                  >
-                    <option value="link">Link</option>
-                    <option value="nota">Nota</option>
-                  </select>
+                  {/* Expanded row: description + lessons + materials */}
+                  {isExpanded && (
+                    <tr>
+                      <td colSpan={5} className="bg-surface border-t border-edge-muted">
+                        <div className="px-3 py-3 space-y-3">
+                          {/* Editable description */}
+                          <div>
+                            <label className="text-xs font-medium text-fg-muted mb-1 block">Descrizione</label>
+                            {isEditing && editingCell.field === 'descrizione' ? (
+                              <textarea
+                                value={editingValue}
+                                onChange={(e) => setEditingValue(e.target.value)}
+                                onBlur={saveEdit}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Escape') setEditingCell(null)
+                                }}
+                                rows={2}
+                                className="w-full px-2 py-1 border border-edge bg-inset text-fg rounded-sm text-xs focus:ring-1 focus:ring-link/40 outline-none resize-none"
+                                autoFocus
+                              />
+                            ) : (
+                              <p
+                                className="text-xs text-fg-muted cursor-text px-2 py-1 rounded-sm hover:bg-overlay min-h-[24px]"
+                                onClick={() => startEdit(u.id, 'descrizione', u.descrizione || '')}
+                              >
+                                {u.descrizione || <span className="text-fg-subtle italic">click per aggiungere descrizione</span>}
+                              </p>
+                            )}
+                          </div>
 
-                  {matForm.tipo === 'link' ? (
-                    <>
-                      <input
-                        type="text"
-                        value={matForm.titolo}
-                        onChange={(e) => setMatForm((f) => ({ ...f, titolo: e.target.value }))}
-                        placeholder="Titolo (opzionale)"
-                        className="px-2 py-1 border border-gray-300 rounded text-xs w-28 focus:ring-1 focus:ring-blue-500 outline-none"
-                      />
-                      <input
-                        type="url"
-                        value={matForm.url}
-                        onChange={(e) => setMatForm((f) => ({ ...f, url: e.target.value }))}
-                        placeholder="https://..."
-                        className="px-2 py-1 border border-gray-300 rounded text-xs flex-1 min-w-[120px] focus:ring-1 focus:ring-blue-500 outline-none"
-                      />
-                    </>
-                  ) : (
-                    <input
-                      type="text"
-                      value={matForm.testo}
-                      onChange={(e) => setMatForm((f) => ({ ...f, testo: e.target.value }))}
-                      placeholder="Nota..."
-                      className="px-2 py-1 border border-gray-300 rounded text-xs flex-1 min-w-[120px] focus:ring-1 focus:ring-blue-500 outline-none"
-                    />
+                          {/* Linked lessons */}
+                          {uLez.length > 0 && (
+                            <div>
+                              <p className="text-xs font-medium text-fg-muted mb-1.5">
+                                Lezioni collegate ({uLez.length})
+                              </p>
+                              <div className="space-y-1">
+                                {uLez.map((l) => {
+                                  const d = l.data?.toDate ? l.data.toDate() : new Date(l.data)
+                                  return (
+                                    <div key={l.id} className="flex items-center gap-2 text-xs">
+                                      <span className="text-fg-muted font-mono w-20 shrink-0">
+                                        {format(d, 'dd MMM yyyy', { locale: it })}
+                                      </span>
+                                      <span className="text-fg-subtle font-mono w-16 shrink-0">
+                                        {l.oraInizio}–{l.oraFine}
+                                      </span>
+                                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${STATO_LEZ_COLORS[l.stato] || ''}`}>
+                                        {STATO_LEZIONE_LABEL[l.stato] || STATO_LEZIONE_LABEL[STATO_LEZIONE.PIANIFICATA]}
+                                      </span>
+                                      <span className="text-fg-subtle font-mono">{l.ore || 0}h</span>
+                                      {l.note && (
+                                        <span className="text-fg-subtle truncate flex-1 italic">
+                                          {l.note}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Materials */}
+                          <div>
+                            <p className="text-xs font-medium text-fg-muted mb-1.5">Materiali</p>
+                            {(u.materiali || []).length > 0 ? (
+                              <div className="space-y-1 mb-2">
+                                {u.materiali.map((m, mi) => (
+                                  <div key={mi} className="flex items-center gap-2 text-xs">
+                                    {m.tipo === 'link' ? (
+                                      <>
+                                        <span className="text-link shrink-0">🔗</span>
+                                        <a
+                                          href={m.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-link hover:underline truncate flex-1"
+                                        >
+                                          {m.titolo || m.url}
+                                        </a>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="text-fg-subtle shrink-0">📝</span>
+                                        <span className="text-fg-muted flex-1">{m.testo}</span>
+                                      </>
+                                    )}
+                                    <button
+                                      onClick={() => setConfirmRemoveMat({ unitaId: u.id, matIndex: mi })}
+                                      className="text-danger/60 hover:text-danger shrink-0"
+                                    >
+                                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-fg-subtle mb-2">Nessun materiale aggiunto.</p>
+                            )}
+
+                            {/* Add material form */}
+                            <div className="flex flex-wrap items-end gap-2">
+                              <select
+                                value={matForm.tipo}
+                                onChange={(e) => setMatForm((f) => ({ ...f, tipo: e.target.value }))}
+                                className="px-2 py-1 border border-edge bg-inset text-fg rounded-sm text-xs focus:ring-1 focus:ring-link/40 outline-none"
+                              >
+                                <option value="link">Link</option>
+                                <option value="nota">Nota</option>
+                              </select>
+
+                              {matForm.tipo === 'link' ? (
+                                <>
+                                  <input
+                                    type="text"
+                                    value={matForm.titolo}
+                                    onChange={(e) => setMatForm((f) => ({ ...f, titolo: e.target.value }))}
+                                    placeholder="Titolo (opzionale)"
+                                    className="px-2 py-1 border border-edge bg-inset text-fg rounded-sm text-xs w-28 focus:ring-1 focus:ring-link/40 outline-none"
+                                  />
+                                  <input
+                                    type="url"
+                                    value={matForm.url}
+                                    onChange={(e) => setMatForm((f) => ({ ...f, url: e.target.value }))}
+                                    placeholder="https://..."
+                                    className="px-2 py-1 border border-edge bg-inset text-fg rounded-sm text-xs flex-1 min-w-[120px] focus:ring-1 focus:ring-link/40 outline-none"
+                                  />
+                                </>
+                              ) : (
+                                <input
+                                  type="text"
+                                  value={matForm.testo}
+                                  onChange={(e) => setMatForm((f) => ({ ...f, testo: e.target.value }))}
+                                  placeholder="Nota..."
+                                  className="px-2 py-1 border border-edge bg-inset text-fg rounded-sm text-xs flex-1 min-w-[120px] focus:ring-1 focus:ring-link/40 outline-none"
+                                />
+                              )}
+
+                              <button
+                                onClick={() => handleAddMaterial(u.id)}
+                                className="px-2 py-1 bg-link text-white text-xs rounded-sm hover:bg-link/80"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
                   )}
+                </Fragment>
+              )
+            })}
 
-                  <button
-                    onClick={() => handleAddMaterial(u.id)}
-                    className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
+            {/* ── New row (always visible) ── */}
+            <tr className="border-t border-edge-muted bg-overlay/20">
+              <td className="px-2 py-1.5 text-accent font-mono text-xs">+</td>
+              <td className="px-2 py-1.5">
+                <form onSubmit={handleAddRow} className="flex gap-1">
+                  <input
+                    ref={newTitoloRef}
+                    type="text"
+                    value={newTitolo}
+                    onChange={(e) => setNewTitolo(e.target.value)}
+                    placeholder="Nuova unita... (Enter per aggiungere)"
+                    className="flex-1 px-1 py-0 border-b border-edge bg-transparent text-sm text-fg outline-none placeholder:text-fg-subtle focus:border-link"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Tab' && !e.shiftKey && newTitolo.trim()) {
+                        e.preventDefault()
+                        // Move focus to ore field
+                        const oreInput = e.target.parentElement.parentElement.nextElementSibling?.querySelector('input')
+                        if (oreInput) oreInput.focus()
+                      }
+                    }}
+                  />
+                </form>
+              </td>
+              <td className="px-2 py-1.5 text-center">
+                <input
+                  type="number"
+                  min={0}
+                  max={99}
+                  value={newOre}
+                  onChange={(e) => setNewOre(e.target.value)}
+                  placeholder="1"
+                  className="w-12 px-1 py-0 border-b border-edge bg-transparent text-sm text-fg text-center outline-none font-mono placeholder:text-fg-subtle focus:border-link"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleAddRow()
+                    }
+                  }}
+                />
+              </td>
+              <td className="px-2 py-1.5"></td>
+              <td className="px-2 py-1.5"></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
-      {unita.length === 0 && !showForm && (
-        <p className="text-sm text-gray-400">Nessuna unita. Aggiungine una per iniziare.</p>
-      )}
-
-      {/* Add / Edit unit form */}
-      {showForm ? (
-        <form onSubmit={handleSubmit} className="bg-blue-50 rounded-lg border border-blue-200 p-4 space-y-3">
-          <h4 className="text-sm font-semibold text-blue-800">
-            {editingId ? 'Modifica unita' : 'Nuova unita'}
-          </h4>
-          <div className="flex flex-wrap gap-3">
-            <div className="flex-1 min-w-[200px]">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Titolo</label>
-              <input
-                type="text"
-                value={form.titolo}
-                onChange={(e) => setForm((f) => ({ ...f, titolo: e.target.value }))}
-                placeholder="es. Introduzione HTML"
-                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                autoFocus
-              />
-            </div>
-            <div className="w-20">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Ore</label>
-              <input
-                type="number"
-                min={1}
-                max={20}
-                value={form.orePreviste}
-                onChange={(e) => setForm((f) => ({ ...f, orePreviste: e.target.value }))}
-                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              />
-            </div>
-            {editingId && (
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Stato</label>
-                <select
-                  value={form.stato}
-                  onChange={(e) => setForm((f) => ({ ...f, stato: e.target.value }))}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                >
-                  <option value={STATO_UNITA.DA_FARE}>{STATO_UNITA_LABEL[STATO_UNITA.DA_FARE]}</option>
-                  <option value={STATO_UNITA.IN_CORSO}>{STATO_UNITA_LABEL[STATO_UNITA.IN_CORSO]}</option>
-                  <option value={STATO_UNITA.COMPLETATA}>{STATO_UNITA_LABEL[STATO_UNITA.COMPLETATA]}</option>
-                </select>
-              </div>
-            )}
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Descrizione (opzionale)
-            </label>
-            <textarea
-              value={form.descrizione}
-              onChange={(e) => setForm((f) => ({ ...f, descrizione: e.target.value }))}
-              rows={2}
-              placeholder="Obiettivi, appunti..."
-              className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="submit"
-              className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700"
-            >
-              {editingId ? 'Salva' : 'Aggiungi'}
-            </button>
-            <button
-              type="button"
-              onClick={resetForm}
-              className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200"
-            >
-              Annulla
-            </button>
-          </div>
-        </form>
-      ) : (
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          Aggiungi unita
-        </button>
+      {unita.length === 0 && (
+        <p className="text-xs text-fg-subtle text-center">Scrivi nella riga sopra per aggiungere la prima unita.</p>
       )}
     </div>
   )
 }
+

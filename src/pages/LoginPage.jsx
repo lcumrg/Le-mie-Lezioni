@@ -4,29 +4,32 @@ export default function LoginPage() {
   const { login, error } = useAuth()
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-canvas px-4">
       <div className="max-w-sm w-full text-center">
+        {/* Terminal prompt decoration */}
+        <p className="font-mono text-sm text-fg-subtle mb-6">&gt; le-mie-lezioni --auth</p>
+
         {/* Logo */}
-        <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200 mb-6">
+        <div className="mx-auto w-16 h-16 bg-accent rounded flex items-center justify-center mb-6">
           <svg className="w-9 h-9 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
           </svg>
         </div>
 
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Le Mie Lezioni</h1>
-        <p className="text-gray-500 text-sm mb-8">
+        <h1 className="text-2xl font-bold text-fg mb-1">Le Mie Lezioni</h1>
+        <p className="text-fg-muted text-sm mb-8">
           Pianifica, monitora e accedi ai tuoi materiali didattici.
         </p>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <div className="mb-4 p-3 bg-badge-x border border-danger/30 rounded-sm text-sm text-danger">
             {error}
           </div>
         )}
 
         <button
           onClick={login}
-          className="inline-flex items-center gap-3 px-6 py-3 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:border-gray-300 transition-all text-sm font-medium text-gray-700"
+          className="inline-flex items-center gap-3 px-6 py-3 bg-surface border border-edge rounded hover:bg-overlay transition-colors text-sm font-medium text-fg"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path

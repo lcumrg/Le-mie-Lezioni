@@ -36,7 +36,7 @@ export default function SettimanaPage() {
   const toast = useToast()
   const navigate = useNavigate()
 
-  // ── Shared state ──
+  // -- Shared state --
   const [lezioni, setLezioni] = useState([])
   const [updatingLezioni, setUpdatingLezioni] = useState(new Set())
   const [assegnazioni, setAssegnazioni] = useState([])
@@ -49,7 +49,7 @@ export default function SettimanaPage() {
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState('grid') // 'grid' | 'list'
 
-  // ── List-mode state ──
+  // -- List-mode state --
   const [generating, setGenerating] = useState(false)
   const [editingLezione, setEditingLezione] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -58,13 +58,13 @@ export default function SettimanaPage() {
 
   const { start, end } = getWeekRange(weekOffset)
 
-  // ── Config ──
+  // -- Config --
   const oreLezione = annoConfig?.oreLezione || []
   const giornoLibero = annoConfig?.giornoLibero ?? null
   const dataFineScuola = annoConfig?.dataFineScuola || null
   const hasOreConfig = oreLezione.length > 0
 
-  // ── Data loading ──
+  // -- Data loading --
   useEffect(() => {
     if (!annoAttivo) {
       setLoading(false)
@@ -93,7 +93,7 @@ export default function SettimanaPage() {
     return () => unsubs.forEach((u) => u())
   }, [annoAttivo, weekOffset])
 
-  // ── Load unita for referenced percorsi ──
+  // -- Load unita for referenced percorsi --
   useEffect(() => {
     const percorsoIds = [...new Set(lezioni.filter((l) => l.percorsoId).map((l) => l.percorsoId))]
     if (percorsoIds.length === 0) return
@@ -113,7 +113,7 @@ export default function SettimanaPage() {
     return () => unsubs.forEach((u) => u())
   }, [lezioni.map((l) => l.percorsoId).filter(Boolean).join(',')])
 
-  // ── Handlers ──
+  // -- Handlers --
 
   async function handleStatoChange(lezioneId, nuovoStato) {
     const prevStato = lezioni.find((l) => l.id === lezioneId)?.stato
@@ -254,7 +254,7 @@ export default function SettimanaPage() {
     handleGenerate()
   }, [viewMode, loading, annoAttivo, lezioni.length, orari.length, start, generating])
 
-  // ── Derived data ──
+  // -- Derived data --
 
   // Days structure for grid view
   const days = useMemo(() => {
@@ -371,15 +371,15 @@ export default function SettimanaPage() {
     }).sort((a, b) => a.classe.localeCompare(b.classe))
   }, [dataFineScuola, orari, vacanze, giornoLibero])
 
-  // ── Render ──
+  // -- Render --
 
   if (configLoading || loading) return <LoadingSpinner />
 
   if (!annoAttivo) {
     return (
       <div className="text-center py-12">
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Settimana</h2>
-        <p className="text-gray-500">
+        <h2 className="text-xl font-semibold text-fg mb-2">Settimana</h2>
+        <p className="text-fg-muted">
           Configura l'anno scolastico nelle Impostazioni per iniziare.
         </p>
       </div>
@@ -394,15 +394,15 @@ export default function SettimanaPage() {
       {/* Header: title + view toggle + week nav */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-gray-900">Settimana</h1>
+          <h1 className="text-2xl font-bold text-fg">Settimana</h1>
           {/* View toggle */}
-          <div className="flex bg-gray-100 rounded-lg p-0.5">
+          <div className="flex bg-overlay rounded-sm p-0.5 border border-edge-muted">
             <button
               onClick={() => setViewMode('grid')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-sm font-medium rounded-sm transition-colors ${
                 viewMode === 'grid'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'bg-surface text-fg'
+                  : 'text-fg-muted hover:text-fg'
               }`}
             >
               <span className="flex items-center gap-1.5">
@@ -414,10 +414,10 @@ export default function SettimanaPage() {
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-sm font-medium rounded-sm transition-colors ${
                 viewMode === 'list'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'bg-surface text-fg'
+                  : 'text-fg-muted hover:text-fg'
               }`}
             >
               <span className="flex items-center gap-1.5">
@@ -454,8 +454,8 @@ export default function SettimanaPage() {
           )}
 
           {!hasOrari && (
-            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-sm text-yellow-800">
+            <div className="mb-6 p-4 bg-badge-warn border border-warn/30 rounded-sm">
+              <p className="text-sm text-warn">
                 Definisci prima il tuo orario settimanale nelle <strong>Impostazioni</strong> per poter generare le lezioni automaticamente.
               </p>
             </div>
@@ -463,7 +463,7 @@ export default function SettimanaPage() {
         </>
       )}
 
-      {/* ── Grid view ── */}
+      {/* -- Grid view -- */}
       {viewMode === 'grid' && (
         <>
           {hasOreConfig ? (
@@ -479,8 +479,8 @@ export default function SettimanaPage() {
               giornoLibero={giornoLibero}
             />
           ) : (
-            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-sm text-yellow-800">
+            <div className="mb-6 p-4 bg-badge-warn border border-warn/30 rounded-sm">
+              <p className="text-sm text-warn">
                 Configura le <strong>ore scolastiche</strong> nelle Impostazioni per vedere la griglia settimanale.
                 In alternativa, usa la vista <button onClick={() => setViewMode('list')} className="underline font-semibold">Lista</button>.
               </p>
@@ -490,7 +490,7 @@ export default function SettimanaPage() {
           {/* Ore rimanenti */}
           {oreRimanentiPerClasse && oreRimanentiPerClasse.length > 0 && (
             <div className="mb-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-3">
+              <h2 className="text-lg font-semibold text-fg mb-3">
                 Ore rimanenti fino al {format(parseISO(dataFineScuola), 'd MMMM yyyy', { locale: it })}
               </h2>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -498,16 +498,16 @@ export default function SettimanaPage() {
                   <div
                     key={`${classe}_${materia}`}
                     onClick={() => navigate('/programmazione')}
-                    className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300 transition-colors"
+                    className="flex items-center justify-between p-3 bg-surface rounded-sm border border-edge cursor-pointer hover:border-link/40 transition-colors"
                   >
                     <div>
-                      <span className="text-sm font-bold text-gray-800">{classe}</span>
-                      <span className="text-sm text-gray-500 ml-1.5">{materia}</span>
+                      <span className="text-sm font-bold text-fg">{classe}</span>
+                      <span className="text-sm text-fg-muted ml-1.5">{materia}</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-lg font-bold text-blue-600">{totaleOre}</span>
-                      <span className="text-xs text-gray-400 ml-0.5">h</span>
-                      <div className="text-[10px] text-gray-400 leading-tight">
+                      <span className="text-lg font-bold text-link font-mono">{totaleOre}</span>
+                      <span className="text-xs text-fg-subtle ml-0.5">h</span>
+                      <div className="text-[10px] text-fg-subtle leading-tight font-mono">
                         {oreSettimana}h/sett (vacanze escluse)
                       </div>
                     </div>
@@ -519,8 +519,8 @@ export default function SettimanaPage() {
 
           {/* Hint if no dataFineScuola */}
           {!dataFineScuola && orari.length > 0 && (
-            <div className="mb-6 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-xs text-amber-700">
+            <div className="mb-6 p-3 bg-badge-warn border border-warn/30 rounded-sm">
+              <p className="text-xs text-warn">
                 Imposta l'<strong>ultimo giorno di scuola</strong> nelle Impostazioni per vedere il calcolo delle ore rimanenti per ogni classe.
               </p>
             </div>
@@ -529,7 +529,7 @@ export default function SettimanaPage() {
           {/* Active assignments progress */}
           {assegnazioni.length > 0 && (
             <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Percorsi attivi</h2>
+              <h2 className="text-lg font-semibold text-fg mb-4">Percorsi attivi</h2>
               <div className="grid gap-3 sm:grid-cols-2">
                 {assegnazioni.map((a) => {
                   const progresso = a.progresso || {}
@@ -541,17 +541,17 @@ export default function SettimanaPage() {
                     <div
                       key={a.id}
                       onClick={() => navigate('/percorsi')}
-                      className="p-4 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300 transition-colors"
+                      className="p-4 bg-surface rounded-sm border border-edge cursor-pointer hover:border-link/40 transition-colors"
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-900">
+                        <span className="text-sm font-medium text-fg">
                           {a.classe} — {a.materia}
                         </span>
-                        <span className="text-xs text-gray-500">{pct}%</span>
+                        <span className="text-xs text-fg-muted font-mono">{pct}%</span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="w-full bg-edge-muted rounded-full h-2">
                         <div
-                          className="bg-blue-600 h-2 rounded-full transition-all"
+                          className="bg-link h-2 rounded-full transition-all"
                           style={{ width: `${pct}%` }}
                         />
                       </div>
@@ -564,7 +564,7 @@ export default function SettimanaPage() {
         </>
       )}
 
-      {/* ── List view ── */}
+      {/* -- List view -- */}
       {viewMode === 'list' && (
         <LessonList
           giorniSettimana={giorniSettimana}

@@ -342,8 +342,8 @@ export default function ExportPage() {
   if (!annoAttivo) {
     return (
       <div className="text-center py-12">
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Export</h2>
-        <p className="text-gray-500">Configura l'anno scolastico nelle Impostazioni per iniziare.</p>
+        <h2 className="text-xl font-semibold text-fg mb-2">Export</h2>
+        <p className="text-fg-muted">Configura l'anno scolastico nelle Impostazioni per iniziare.</p>
       </div>
     )
   }
@@ -351,8 +351,8 @@ export default function ExportPage() {
   if (classi.length === 0) {
     return (
       <div className="text-center py-12">
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Export</h2>
-        <p className="text-gray-500">Aggiungi le classi nelle Impostazioni per poter esportare.</p>
+        <h2 className="text-xl font-semibold text-fg mb-2">Export</h2>
+        <p className="text-fg-muted">Aggiungi le classi nelle Impostazioni per poter esportare.</p>
       </div>
     )
   }
@@ -361,16 +361,16 @@ export default function ExportPage() {
     <div className="max-w-5xl mx-auto">
       {/* Header + class selector */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Export</h1>
+        <h1 className="text-2xl font-bold text-fg">Export</h1>
         <div className="flex gap-1">
           {classi.map((c) => (
             <button
               key={c}
               onClick={() => setSelectedClasse(c)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+              className={`px-3 py-1.5 text-sm font-medium rounded-sm transition-colors ${
                 selectedClasse === c
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-link/20 text-link border border-link/30'
+                  : 'bg-overlay text-fg-muted hover:bg-overlay'
               }`}
             >
               {c}
@@ -380,7 +380,7 @@ export default function ExportPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 mb-6">
+      <div className="flex border-b border-edge mb-6">
         {[
           { id: 'iniziale', label: 'Programmazione Iniziale' },
           { id: 'svolta', label: 'Programmazione Svolta' },
@@ -391,8 +391,8 @@ export default function ExportPage() {
             onClick={() => setActiveTab(tab.id)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab.id
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-link text-link'
+                : 'border-transparent text-fg-muted hover:text-fg hover:border-edge'
             }`}
           >
             {tab.label}
@@ -404,14 +404,14 @@ export default function ExportPage() {
       {activeTab === 'iniziale' && (
         <div>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-fg-muted">
               Testo strutturato dei percorsi pianificati, da copiare nei documenti scolastici.
             </p>
             <div className="flex gap-2 shrink-0">
               <button
                 onClick={() => handleCopy(testoIniziale)}
                 disabled={!testoIniziale}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-link text-white text-xs font-medium rounded-sm hover:bg-link/80 disabled:opacity-50"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -421,7 +421,7 @@ export default function ExportPage() {
               <button
                 onClick={() => handleDownload(testoIniziale, `programmazione_iniziale_${selectedClasse}_${annoAttivo}.txt`)}
                 disabled={!testoIniziale}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-overlay text-fg-muted text-xs font-medium rounded-sm hover:bg-overlay disabled:opacity-50"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -431,11 +431,11 @@ export default function ExportPage() {
             </div>
           </div>
           {testoIniziale ? (
-            <pre className="bg-white border border-gray-200 rounded-lg p-4 text-sm text-gray-800 whitespace-pre-wrap font-mono leading-relaxed max-h-[600px] overflow-y-auto">
+            <pre className="bg-inset border border-edge rounded-sm p-4 text-sm text-fg whitespace-pre-wrap font-mono leading-relaxed max-h-[600px] overflow-y-auto">
               {testoIniziale}
             </pre>
           ) : (
-            <div className="p-8 bg-white rounded-lg border border-gray-200 text-center text-sm text-gray-400">
+            <div className="p-8 bg-surface rounded-sm border border-edge text-center text-sm text-fg-subtle">
               Nessun percorso definito per {selectedClasse}. Creane uno nella pagina Percorsi.
             </div>
           )}
@@ -446,14 +446,14 @@ export default function ExportPage() {
       {activeTab === 'svolta' && (
         <div>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-fg-muted">
               Consuntivo di quanto effettivamente svolto, per i documenti di fine anno.
             </p>
             <div className="flex gap-2 shrink-0">
               <button
                 onClick={() => handleCopy(testoSvolta)}
                 disabled={!testoSvolta}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-link text-white text-xs font-medium rounded-sm hover:bg-link/80 disabled:opacity-50"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -463,7 +463,7 @@ export default function ExportPage() {
               <button
                 onClick={() => handleDownload(testoSvolta, `programmazione_svolta_${selectedClasse}_${annoAttivo}.txt`)}
                 disabled={!testoSvolta}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-overlay text-fg-muted text-xs font-medium rounded-sm hover:bg-overlay disabled:opacity-50"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -473,11 +473,11 @@ export default function ExportPage() {
             </div>
           </div>
           {testoSvolta ? (
-            <pre className="bg-white border border-gray-200 rounded-lg p-4 text-sm text-gray-800 whitespace-pre-wrap font-mono leading-relaxed max-h-[600px] overflow-y-auto">
+            <pre className="bg-inset border border-edge rounded-sm p-4 text-sm text-fg whitespace-pre-wrap font-mono leading-relaxed max-h-[600px] overflow-y-auto">
               {testoSvolta}
             </pre>
           ) : (
-            <div className="p-8 bg-white rounded-lg border border-gray-200 text-center text-sm text-gray-400">
+            <div className="p-8 bg-surface rounded-sm border border-edge text-center text-sm text-fg-subtle">
               Nessun percorso definito per {selectedClasse}. Creane uno nella pagina Percorsi.
             </div>
           )}
@@ -491,7 +491,7 @@ export default function ExportPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setWeekOffset((o) => o - 1)}
-                className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600"
+                className="p-1.5 rounded-sm hover:bg-overlay text-fg-muted"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -499,16 +499,16 @@ export default function ExportPage() {
               </button>
               <button
                 onClick={() => setWeekOffset(0)}
-                className="px-2.5 py-1 text-xs font-medium rounded-lg hover:bg-gray-200 text-gray-700"
+                className="px-2.5 py-1 text-xs font-medium rounded-sm hover:bg-overlay text-fg"
               >
                 Oggi
               </button>
-              <span className="text-sm font-medium text-gray-600 min-w-[170px] text-center">
+              <span className="text-sm font-medium text-fg-muted min-w-[170px] text-center">
                 {format(weekStart, 'd MMM', { locale: it })} – {format(weekEnd, 'd MMM yyyy', { locale: it })}
               </span>
               <button
                 onClick={() => setWeekOffset((o) => o + 1)}
-                className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600"
+                className="p-1.5 rounded-sm hover:bg-overlay text-fg-muted"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -518,7 +518,7 @@ export default function ExportPage() {
             <button
               onClick={handlePrintOrario}
               disabled={globalOrarioRows.length === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-link text-white text-xs font-medium rounded-sm hover:bg-link/80 disabled:opacity-50"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -529,19 +529,19 @@ export default function ExportPage() {
 
           <div ref={orarioPrintRef}>
             {globalOrarioRows.length > 0 ? (
-              <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+              <div className="bg-surface border border-edge rounded-sm overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50">
-                      <th className="border border-gray-200 px-2 py-2 text-xs font-semibold text-gray-600 w-16">Ora</th>
+                    <tr className="bg-overlay">
+                      <th className="border border-edge px-2 py-2 text-xs font-semibold text-fg-muted w-16">Ora</th>
                       {allGiorni.map((g) => {
                         const vacanza = getVacanza(g)
                         return (
-                          <th key={g} className={`border border-gray-200 px-2 py-2 text-xs font-semibold ${vacanza ? 'bg-amber-50 text-amber-700' : 'text-gray-600'}`}>
+                          <th key={g} className={`border border-edge px-2 py-2 text-xs font-semibold ${vacanza ? 'bg-badge-warn text-warn' : 'text-fg-muted'}`}>
                             <div>{GIORNI_LABEL[g]}</div>
-                            <div className={`font-normal ${vacanza ? 'text-amber-500' : 'text-gray-400'}`}>{format(addDays(weekStart, g), 'd MMM', { locale: it })}</div>
+                            <div className={`font-normal ${vacanza ? 'text-warn/70' : 'text-fg-subtle'}`}>{format(addDays(weekStart, g), 'd MMM', { locale: it })}</div>
                             {vacanza && (
-                              <div className="font-normal text-[10px] text-amber-500 mt-0.5">{TIPO_VACANZA_LABEL[vacanza.tipo] || 'Non scol.'}</div>
+                              <div className="font-normal text-[10px] text-warn/70 mt-0.5">{TIPO_VACANZA_LABEL[vacanza.tipo] || 'Non scol.'}</div>
                             )}
                           </th>
                         )
@@ -555,10 +555,10 @@ export default function ExportPage() {
                       if (!hasAny) return null
                       return (
                         <tr key={row.ora}>
-                          <td className="border border-gray-200 px-2 py-2 text-center font-semibold text-blue-600 bg-gray-50 align-top">
+                          <td className="border border-edge px-2 py-2 text-center font-semibold text-link bg-overlay align-top">
                             <div>{ORE_ROMAN[row.ora - 1] || row.ora}</div>
                             {anySlot && (
-                              <div className="text-[10px] text-gray-400 font-normal mt-0.5">
+                              <div className="text-[10px] text-fg-subtle font-normal mt-0.5">
                                 {anySlot.oraInizio}–{anySlot.oraFine}
                               </div>
                             )}
@@ -567,20 +567,20 @@ export default function ExportPage() {
                             const slots = row[g]
                             const vacanza = getVacanza(g)
                             return (
-                              <td key={g} className={`border border-gray-200 px-1.5 py-1.5 align-top ${vacanza ? 'bg-amber-50/50' : ''} ${slots.length > 0 ? 'text-gray-800' : 'text-gray-300 text-center'}`}>
+                              <td key={g} className={`border border-edge px-1.5 py-1.5 align-top ${vacanza ? 'bg-badge-warn/30' : 'bg-surface'} ${slots.length > 0 ? 'text-fg' : 'text-fg-subtle text-center'}`}>
                                 {slots.length > 0 ? (
                                   <div className={`space-y-1.5 ${vacanza ? 'opacity-40 line-through' : ''}`}>
                                     {slots.map((slot) => {
                                       const info = getSlotInfo(slot.classe, g, row.ora)
                                       return (
-                                        <div key={slot.classe} className={`${slots.length > 1 ? 'pb-1.5 border-b border-dotted border-gray-200 last:border-b-0 last:pb-0' : ''}`}>
-                                          <div className="font-bold text-xs text-gray-900">{slot.classe}</div>
-                                          <div className="text-[11px] text-gray-600">{slot.materia}</div>
+                                        <div key={slot.classe} className={`${slots.length > 1 ? 'pb-1.5 border-b border-dotted border-edge-muted last:border-b-0 last:pb-0' : ''}`}>
+                                          <div className="font-bold text-xs text-fg">{slot.classe}</div>
+                                          <div className="text-[11px] text-fg-muted">{slot.materia}</div>
                                           {info && (
                                             <div className="mt-0.5">
-                                              <div className="text-[10px] text-blue-600 font-semibold leading-tight">{info.percorso}</div>
+                                              <div className="text-[10px] text-link font-semibold leading-tight">{info.percorso}</div>
                                               {info.unita && (
-                                                <div className="text-[9px] text-gray-500 leading-tight">{info.unita}</div>
+                                                <div className="text-[9px] text-fg-muted leading-tight">{info.unita}</div>
                                               )}
                                             </div>
                                           )}
@@ -599,7 +599,7 @@ export default function ExportPage() {
                 </table>
               </div>
             ) : (
-              <div className="p-8 bg-white rounded-lg border border-gray-200 text-center text-sm text-gray-400">
+              <div className="p-8 bg-surface rounded-sm border border-edge text-center text-sm text-fg-subtle">
                 Nessun orario definito. Configura l'orario nelle Impostazioni.
               </div>
             )}

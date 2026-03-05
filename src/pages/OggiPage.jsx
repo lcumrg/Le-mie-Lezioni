@@ -29,9 +29,9 @@ import QuickNote from '../components/common/QuickNote'
 import PercorsoSelector from '../components/calendario/PercorsoSelector'
 
 const STATO_BADGE = {
-  [STATO_LEZIONE.PIANIFICATA]: 'bg-blue-100 text-blue-700',
-  [STATO_LEZIONE.SVOLTA]: 'bg-green-100 text-green-700',
-  [STATO_LEZIONE.SALTATA]: 'bg-red-100 text-red-700',
+  [STATO_LEZIONE.PIANIFICATA]: 'bg-badge-p text-link',
+  [STATO_LEZIONE.SVOLTA]: 'bg-badge-s text-accent',
+  [STATO_LEZIONE.SALTATA]: 'bg-badge-x text-danger',
 }
 
 export default function OggiPage() {
@@ -247,10 +247,10 @@ export default function OggiPage() {
   if (!annoAttivo) {
     return (
       <div className="text-center py-12">
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Benvenuto!</h2>
-        <p className="text-gray-500">
+        <h2 className="text-xl font-semibold text-fg mb-2">Benvenuto!</h2>
+        <p className="text-fg-muted">
           Configura l'anno scolastico per iniziare.{' '}
-          <button onClick={() => navigate('/impostazioni')} className="text-blue-600 hover:underline">
+          <button onClick={() => navigate('/impostazioni')} className="text-link hover:underline">
             Vai alle impostazioni
           </button>
         </p>
@@ -263,13 +263,13 @@ export default function OggiPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      {/* ── Day navigation bar ── */}
+      {/* -- Day navigation bar -- */}
       <div className="flex items-center justify-between mb-2">
-        <h1 className="text-2xl font-bold text-gray-900">Oggi</h1>
+        <h1 className="text-2xl font-bold text-fg">Oggi</h1>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setDayOffset((o) => o - 1)}
-            className="p-2 rounded-lg hover:bg-gray-200 text-gray-600"
+            className="p-2 rounded-sm hover:bg-overlay text-fg-muted"
             title="Giorno precedente"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -278,17 +278,17 @@ export default function OggiPage() {
           </button>
           <button
             onClick={() => setDayOffset(0)}
-            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+            className={`px-3 py-1.5 text-sm font-medium rounded-sm transition-colors ${
               dayOffset === 0
-                ? 'bg-blue-100 text-blue-700'
-                : 'hover:bg-gray-200 text-gray-700'
+                ? 'bg-badge-p text-link'
+                : 'hover:bg-overlay text-fg-muted'
             }`}
           >
             Oggi
           </button>
           <button
             onClick={() => setDayOffset((o) => o + 1)}
-            className="p-2 rounded-lg hover:bg-gray-200 text-gray-600"
+            className="p-2 rounded-sm hover:bg-overlay text-fg-muted"
             title="Giorno successivo"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -299,63 +299,63 @@ export default function OggiPage() {
       </div>
 
       {/* Date label */}
-      <p className="text-sm text-gray-500 mb-5 capitalize">{dayLabel}</p>
+      <p className="text-sm text-fg-muted mb-5 capitalize">{dayLabel}</p>
 
-      {/* ── Vacation banner ── */}
+      {/* -- Vacation banner -- */}
       {vacanza && (
-        <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3">
-          <svg className="w-5 h-5 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <div className="mb-4 px-4 py-3 bg-badge-warn border border-warn/30 rounded-sm flex items-center gap-3">
+          <svg className="w-5 h-5 text-warn shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
           </svg>
           <div>
-            <p className="text-sm font-semibold text-amber-800">
+            <p className="text-sm font-semibold text-warn">
               {TIPO_VACANZA_LABEL[vacanza.tipo] || 'Giorno non scolastico'}
             </p>
             {vacanza.nome && (
-              <p className="text-xs text-amber-600">{vacanza.nome}</p>
+              <p className="text-xs text-warn/70">{vacanza.nome}</p>
             )}
           </div>
         </div>
       )}
 
-      {/* ── Summary + progress ── */}
+      {/* -- Summary + progress -- */}
       {totale > 0 && (
-        <div className="mb-4 px-4 py-3 bg-white border border-gray-200 rounded-lg">
+        <div className="mb-4 px-4 py-3 bg-surface border border-edge rounded-sm">
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-3 text-sm text-gray-600 flex-wrap">
-              <span className="font-semibold text-gray-900">{totale} lezioni</span>
-              <span className="text-green-600">{svolte} svolte</span>
-              <span className="text-blue-600">{daFare} da fare</span>
-              {saltate > 0 && <span className="text-red-500">{saltate} saltate</span>}
+            <div className="flex items-center gap-3 text-sm text-fg-muted flex-wrap">
+              <span className="font-semibold text-fg font-mono">{totale} lezioni</span>
+              <span className="text-accent font-mono">{svolte} svolte</span>
+              <span className="text-link font-mono">{daFare} da fare</span>
+              {saltate > 0 && <span className="text-danger font-mono">{saltate} saltate</span>}
             </div>
-            <span className="text-sm font-bold text-green-600">{progressPct}%</span>
+            <span className="text-sm font-bold text-accent font-mono">{progressPct}%</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="w-full bg-edge-muted rounded-full h-2">
             <div
-              className="bg-green-500 h-2 rounded-full transition-all"
+              className="bg-accent h-2 rounded-full transition-all"
               style={{ width: `${progressPct}%` }}
             />
           </div>
         </div>
       )}
 
-      {/* ── Auto-generate banner ── */}
+      {/* -- Auto-generate banner -- */}
       {hasUngenerated && (
-        <div className="mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between gap-3">
-          <p className="text-sm text-blue-700">
+        <div className="mb-4 px-4 py-3 bg-badge-p border border-link/30 rounded-sm flex items-center justify-between gap-3">
+          <p className="text-sm text-link">
             Hai <strong>{slotsOggi.length}</strong> ore oggi non ancora generate.
           </p>
           <button
             onClick={handleGenerate}
             disabled={generating}
-            className="px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 shrink-0"
+            className="px-4 py-1.5 bg-link text-white text-sm font-medium rounded-sm hover:bg-link/80 disabled:opacity-50 shrink-0"
           >
             {generating ? 'Generazione...' : 'Genera lezioni'}
           </button>
         </div>
       )}
 
-      {/* ── Lesson list ── */}
+      {/* -- Lesson list -- */}
       {totale > 0 ? (
         <div className="space-y-3">
           {lezioniOggi.map((lez) => {
@@ -368,14 +368,14 @@ export default function OggiPage() {
             return (
               <div
                 key={lez.id}
-                className={`rounded-lg border bg-white transition-all ${
+                className={`rounded-sm border bg-surface transition-all ${
                   inCorso
-                    ? 'border-blue-400 border-l-4 border-l-blue-500 shadow-md shadow-blue-100'
+                    ? 'border-link border-l-4 border-l-link'
                     : lez.stato === STATO_LEZIONE.SVOLTA
-                      ? 'border-green-200 bg-green-50/30'
+                      ? 'border-accent/30 bg-badge-s/30'
                       : lez.stato === STATO_LEZIONE.SALTATA
-                        ? 'border-red-200 bg-red-50/30'
-                        : 'border-gray-200'
+                        ? 'border-danger/30 bg-badge-x/30'
+                        : 'border-edge'
                 } ${vacanza ? 'opacity-50' : ''}`}
               >
                 <div className="p-4">
@@ -383,29 +383,29 @@ export default function OggiPage() {
                   <div className="flex items-center gap-3">
                     {/* Time */}
                     <div className="shrink-0 text-center min-w-[4.5rem]">
-                      <div className={`text-sm font-bold ${inCorso ? 'text-blue-600' : 'text-gray-700'}`}>
+                      <div className={`text-sm font-bold font-mono ${inCorso ? 'text-link' : 'text-fg'}`}>
                         {lez.oraInizio || '--:--'}
                       </div>
-                      <div className="text-xs text-gray-400">{lez.oraFine || ''}</div>
+                      <div className="text-xs text-fg-subtle font-mono">{lez.oraFine || ''}</div>
                     </div>
 
                     {/* Divider */}
                     <div className={`w-0.5 self-stretch rounded-full shrink-0 min-h-[2.5rem] ${
-                      lez.stato === STATO_LEZIONE.SVOLTA ? 'bg-green-400' :
-                      lez.stato === STATO_LEZIONE.SALTATA ? 'bg-red-400' :
-                      inCorso ? 'bg-blue-500' : 'bg-gray-300'
+                      lez.stato === STATO_LEZIONE.SVOLTA ? 'bg-accent' :
+                      lez.stato === STATO_LEZIONE.SALTATA ? 'bg-danger' :
+                      inCorso ? 'bg-link' : 'bg-edge'
                     }`} />
 
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-base font-bold text-gray-900">{lez.classe}</span>
-                        <span className="text-gray-400">&mdash;</span>
-                        <span className="text-sm font-medium text-gray-700 truncate">
+                        <span className="text-base font-bold text-fg">{lez.classe}</span>
+                        <span className="text-fg-subtle">&mdash;</span>
+                        <span className="text-sm font-medium text-fg-muted truncate">
                           {lez.titoloOverride || lez.materia}
                         </span>
                         {inCorso && (
-                          <span className="text-[10px] font-semibold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-full">
+                          <span className="text-[10px] font-semibold text-link bg-badge-p px-1.5 py-0.5 rounded-full">
                             In corso
                           </span>
                         )}
@@ -419,13 +419,13 @@ export default function OggiPage() {
                           key={s}
                           onClick={() => handleStatoChange(lez.id, s)}
                           disabled={isUpdating}
-                          className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all ${
+                          className={`w-8 h-8 rounded-sm text-xs font-bold flex items-center justify-center transition-all ${
                             lez.stato === s
-                              ? `${STATO_BADGE[s]} ring-2 ring-offset-1 ${
-                                  s === STATO_LEZIONE.PIANIFICATA ? 'ring-blue-300' :
-                                  s === STATO_LEZIONE.SVOLTA ? 'ring-green-300' : 'ring-red-300'
+                              ? `${STATO_BADGE[s]} ring-2 ring-offset-1 ring-offset-surface ${
+                                  s === STATO_LEZIONE.PIANIFICATA ? 'ring-link/40' :
+                                  s === STATO_LEZIONE.SVOLTA ? 'ring-accent/40' : 'ring-danger/40'
                                 }`
-                              : 'bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600'
+                              : 'bg-overlay text-fg-subtle hover:bg-surface hover:text-fg-muted'
                           } ${isUpdating ? 'opacity-50 pointer-events-none' : ''}`}
                           title={STATO_LEZIONE_LABEL[s]}
                         >
@@ -439,21 +439,21 @@ export default function OggiPage() {
                   <div className="mt-2 ml-[5.5rem]">
                     {percorso && !isEditingPercorso ? (
                       <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1.5 px-2 py-1 bg-purple-50 border border-purple-200 rounded-md max-w-full">
-                          <svg className="w-3.5 h-3.5 text-purple-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-badge-special border border-special/30 rounded-sm max-w-full">
+                          <svg className="w-3.5 h-3.5 text-special shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                           </svg>
-                          <span className="text-xs font-semibold text-purple-700 truncate">{percorso.titolo}</span>
+                          <span className="text-xs font-semibold text-special truncate">{percorso.titolo}</span>
                           {unita && (
                             <>
-                              <span className="text-purple-300">/</span>
-                              <span className="text-xs text-purple-600 truncate">{unita.titolo}</span>
+                              <span className="text-special/40">/</span>
+                              <span className="text-xs text-special/70 truncate">{unita.titolo}</span>
                             </>
                           )}
                         </div>
                         <button
                           onClick={() => setEditingPercorso(lez.id)}
-                          className="text-gray-400 hover:text-gray-600 p-1"
+                          className="text-fg-subtle hover:text-fg-muted p-1"
                           title="Modifica percorso"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -464,7 +464,7 @@ export default function OggiPage() {
                     ) : !percorso && !isEditingPercorso ? (
                       <button
                         onClick={() => setEditingPercorso(lez.id)}
-                        className="text-xs text-purple-400 hover:text-purple-600 hover:bg-purple-50 rounded px-2 py-1 transition-colors"
+                        className="text-xs text-special/60 hover:text-special hover:bg-badge-special rounded-sm px-2 py-1 transition-colors"
                       >
                         + Collega percorso
                       </button>
@@ -472,7 +472,7 @@ export default function OggiPage() {
 
                     {/* Inline PercorsoSelector */}
                     {isEditingPercorso && (
-                      <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      <div className="mt-2 p-3 bg-overlay border border-edge rounded-sm">
                         <PercorsoSelector
                           percorsi={percorsi.filter((p) => p.classe === lez.classe && p.materia === lez.materia)}
                           percorsoId={lez.percorsoId || null}
@@ -483,7 +483,7 @@ export default function OggiPage() {
                         />
                         <button
                           onClick={() => setEditingPercorso(null)}
-                          className="mt-2 text-xs text-gray-500 hover:text-gray-700"
+                          className="mt-2 text-xs text-fg-muted hover:text-fg"
                         >
                           Chiudi
                         </button>
@@ -508,7 +508,7 @@ export default function OggiPage() {
           {!vacanza && dayOffset <= 0 && daFare > 0 && (
             <button
               onClick={handleMarkAllSvolte}
-              className="w-full py-2.5 bg-green-50 border border-green-200 text-green-700 rounded-lg font-medium text-sm hover:bg-green-100 transition-colors flex items-center justify-center gap-2"
+              className="w-full py-2.5 bg-badge-s border border-accent/30 text-accent rounded-sm font-medium text-sm hover:bg-badge-s/80 transition-colors flex items-center justify-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -518,33 +518,33 @@ export default function OggiPage() {
           )}
         </div>
       ) : (
-        /* ── Empty state ── */
+        /* -- Empty state -- */
         <div className="text-center py-12">
           {isWeekendOrFree ? (
             <>
-              <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <svg className="w-12 h-12 mx-auto text-fg-subtle mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
               </svg>
-              <p className="text-gray-500 font-medium text-base">Nessuna lezione</p>
-              <p className="text-gray-400 text-sm mt-1">Buon riposo!</p>
+              <p className="text-fg-muted font-medium text-base">Nessuna lezione</p>
+              <p className="text-fg-subtle text-sm mt-1">Buon riposo!</p>
             </>
           ) : vacanza ? (
             <>
-              <svg className="w-12 h-12 mx-auto text-amber-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <svg className="w-12 h-12 mx-auto text-warn/60 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
               </svg>
-              <p className="text-amber-600 font-medium text-base">Giorno non scolastico</p>
-              <p className="text-amber-400 text-sm mt-1">
+              <p className="text-warn font-medium text-base">Giorno non scolastico</p>
+              <p className="text-warn/60 text-sm mt-1">
                 {vacanza.nome || TIPO_VACANZA_LABEL[vacanza.tipo] || 'Buon riposo!'}
               </p>
             </>
           ) : !hasUngenerated ? (
             <>
-              <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <svg className="w-12 h-12 mx-auto text-fg-subtle mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
               </svg>
-              <p className="text-gray-500 font-medium text-base">Nessuna lezione</p>
-              <p className="text-gray-400 text-sm mt-1">Buon riposo!</p>
+              <p className="text-fg-muted font-medium text-base">Nessuna lezione</p>
+              <p className="text-fg-subtle text-sm mt-1">Buon riposo!</p>
             </>
           ) : null}
         </div>

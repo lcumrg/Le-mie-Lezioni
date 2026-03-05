@@ -52,10 +52,17 @@ export function ToastProvider({ children }) {
 }
 
 const TOAST_STYLES = {
-  info: 'bg-blue-600',
-  success: 'bg-green-600',
-  error: 'bg-red-600',
-  warning: 'bg-amber-600',
+  info: 'border-l-4 border-l-link',
+  success: 'border-l-4 border-l-accent',
+  error: 'border-l-4 border-l-danger',
+  warning: 'border-l-4 border-l-warn',
+}
+
+const TOAST_ICON_COLORS = {
+  info: 'text-link',
+  success: 'text-accent',
+  error: 'text-danger',
+  warning: 'text-warn',
 }
 
 const TOAST_ICONS = {
@@ -73,23 +80,23 @@ function ToastContainer({ toasts, onRemove }) {
       {toasts.map((t) => (
         <div
           key={t.id}
-          className={`${TOAST_STYLES[t.type] || TOAST_STYLES.info} text-white px-4 py-3 rounded-lg shadow-lg flex items-start gap-2 animate-[slideIn_0.2s_ease-out]`}
+          className={`${TOAST_STYLES[t.type] || TOAST_STYLES.info} bg-overlay text-fg px-4 py-3 rounded-sm flex items-start gap-2 animate-[slideIn_0.2s_ease-out]`}
         >
-          <svg className="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <svg className={`w-5 h-5 shrink-0 mt-0.5 ${TOAST_ICON_COLORS[t.type] || TOAST_ICON_COLORS.info}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d={TOAST_ICONS[t.type] || TOAST_ICONS.info} />
           </svg>
           <span className="text-sm flex-1">{t.message}</span>
           {t.action && (
             <button
               onClick={() => { t.action.onClick(); onRemove(t.id) }}
-              className="text-white font-semibold text-sm underline underline-offset-2 hover:text-white/90 shrink-0"
+              className="text-link font-semibold text-sm underline underline-offset-2 hover:text-link/80 shrink-0"
             >
               {t.action.label}
             </button>
           )}
           <button
             onClick={() => onRemove(t.id)}
-            className="text-white/70 hover:text-white shrink-0"
+            className="text-fg-subtle hover:text-fg shrink-0"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

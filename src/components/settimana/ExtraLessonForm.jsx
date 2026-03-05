@@ -55,47 +55,47 @@ export default function ExtraLessonForm({ annoAttivo, assegnazioni, onClose, onS
   }
 
   return (
-    <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
-      <h3 className="text-sm font-semibold text-purple-800 mb-3">
+    <div className="mb-6 p-4 bg-badge-special border border-special/30 rounded-sm">
+      <h3 className="text-sm font-semibold text-special mb-3">
         Aggiungi lezione extra (supplenza, recupero, attivita extra...)
       </h3>
       <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Data</label>
+          <label className="block text-xs font-medium text-fg-muted mb-1">Data</label>
           <input
             type="date"
             value={form.data}
             onChange={(e) => setForm((f) => ({ ...f, data: e.target.value }))}
-            className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none"
+            className="w-full px-3 py-1.5 border border-edge rounded-sm text-sm text-fg bg-surface focus:ring-1 focus:ring-special/40 focus:border-special outline-none"
             required
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Ora inizio</label>
+          <label className="block text-xs font-medium text-fg-muted mb-1">Ora inizio</label>
           <input
             type="time"
             value={form.oraInizio}
             onChange={(e) => setForm((f) => ({ ...f, oraInizio: e.target.value }))}
-            className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none"
+            className="w-full px-3 py-1.5 border border-edge rounded-sm text-sm text-fg bg-surface font-mono focus:ring-1 focus:ring-special/40 focus:border-special outline-none"
             required
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Ora fine</label>
+          <label className="block text-xs font-medium text-fg-muted mb-1">Ora fine</label>
           <input
             type="time"
             value={form.oraFine}
             onChange={(e) => setForm((f) => ({ ...f, oraFine: e.target.value }))}
-            className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none"
+            className="w-full px-3 py-1.5 border border-edge rounded-sm text-sm text-fg bg-surface font-mono focus:ring-1 focus:ring-special/40 focus:border-special outline-none"
             required
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Classe</label>
+          <label className="block text-xs font-medium text-fg-muted mb-1">Classe</label>
           <select
             value={form.classeId}
             onChange={(e) => handleClasseChange(e.target.value)}
-            className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none"
+            className="w-full px-3 py-1.5 border border-edge rounded-sm text-sm text-fg bg-surface focus:ring-1 focus:ring-special/40 focus:border-special outline-none"
             required
           >
             <option value="">Seleziona classe...</option>
@@ -105,38 +105,38 @@ export default function ExtraLessonForm({ annoAttivo, assegnazioni, onClose, onS
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Materia</label>
+          <label className="block text-xs font-medium text-fg-muted mb-1">Materia</label>
           <input
             type="text"
             value={form.materia}
             onChange={(e) => setForm((f) => ({ ...f, materia: e.target.value }))}
             placeholder="Materia"
-            className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50"
+            className="w-full px-3 py-1.5 border border-edge rounded-sm text-sm text-fg bg-inset focus:ring-1 focus:ring-special/40 focus:border-special outline-none"
             required
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Note (opzionale)</label>
+          <label className="block text-xs font-medium text-fg-muted mb-1">Note (opzionale)</label>
           <input
             type="text"
             value={form.note}
             onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
             placeholder="Supplenza, recupero..."
-            className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none"
+            className="w-full px-3 py-1.5 border border-edge rounded-sm text-sm text-fg bg-surface focus:ring-1 focus:ring-special/40 focus:border-special outline-none"
           />
         </div>
         <div className="sm:col-span-2 lg:col-span-3 flex items-center gap-2 pt-1">
           <button
             type="submit"
             disabled={submitting}
-            className="px-4 py-1.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50"
+            className="px-4 py-1.5 bg-special text-canvas text-sm font-medium rounded-sm hover:bg-special/80 disabled:opacity-50"
           >
             {submitting ? 'Aggiunta...' : 'Aggiungi'}
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200"
+            className="px-4 py-1.5 bg-overlay text-fg text-sm font-medium rounded-sm hover:bg-edge-muted"
           >
             Annulla
           </button>

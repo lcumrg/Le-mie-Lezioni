@@ -138,8 +138,8 @@ export default function ArchivioPage() {
   if (!annoAttivo) {
     return (
       <div className="text-center py-12">
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Archivio</h2>
-        <p className="text-gray-500">
+        <h2 className="text-xl font-semibold text-fg mb-2">Archivio</h2>
+        <p className="text-fg-muted">
           Configura l'anno scolastico nelle Impostazioni per iniziare.
         </p>
       </div>
@@ -148,7 +148,7 @@ export default function ArchivioPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Archivio</h1>
+      <h1 className="text-2xl font-bold text-fg mb-6">Archivio</h1>
 
       <ConfirmDialog
         open={cloneConfirm !== null}
@@ -160,12 +160,12 @@ export default function ArchivioPage() {
       />
 
       {anniArchivio.length === 0 && !selectedAnno ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-          <svg className="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+        <div className="bg-surface rounded-sm border border-edge p-8 text-center">
+          <svg className="w-12 h-12 text-fg-subtle mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
           </svg>
-          <p className="text-gray-500 mb-2">Nessun anno archiviato</p>
-          <p className="text-sm text-gray-400">
+          <p className="text-fg-muted mb-2">Nessun anno archiviato</p>
+          <p className="text-sm text-fg-subtle">
             Quando creerai un nuovo anno scolastico, quelli precedenti appariranno qui.
           </p>
         </div>
@@ -177,10 +177,10 @@ export default function ArchivioPage() {
               <button
                 key={anno}
                 onClick={() => setSelectedAnno(selectedAnno === anno ? null : anno)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-4 py-2 rounded-sm text-sm font-medium transition-colors ${
                   selectedAnno === anno
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+                    ? 'bg-link text-white'
+                    : 'bg-surface border border-edge text-fg hover:bg-overlay'
                 }`}
               >
                 {anno}
@@ -189,12 +189,12 @@ export default function ArchivioPage() {
           </div>
 
           {/* Current anno card (always show as info) */}
-          <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 flex items-center justify-between">
+          <div className="bg-badge-s border border-accent/30 rounded-sm px-4 py-3 flex items-center justify-between">
             <div>
-              <span className="text-sm font-medium text-green-800">Anno corrente: </span>
-              <span className="text-sm font-bold text-green-900">{annoAttivo}</span>
+              <span className="text-sm font-medium text-accent">Anno corrente: </span>
+              <span className="text-sm font-bold text-accent">{annoAttivo}</span>
             </div>
-            <span className="text-[10px] px-2 py-0.5 bg-green-200 text-green-800 rounded-full font-medium">
+            <span className="text-[10px] px-2 py-0.5 bg-accent/20 text-accent rounded-full font-medium">
               Attivo
             </span>
           </div>
@@ -210,30 +210,30 @@ export default function ArchivioPage() {
                 const stats = getAnnoStats(selectedAnno)
                 if (!stats) return null
                 return (
-                  <div className="bg-white rounded-lg border border-gray-200 p-4">
-                    <h2 className="text-sm font-semibold text-gray-500 mb-3">
+                  <div className="bg-surface rounded-sm border border-edge p-4">
+                    <h2 className="text-sm font-semibold text-fg-muted mb-3">
                       Riepilogo {selectedAnno}
                     </h2>
                     <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
                       <div>
-                        <p className="text-2xl font-bold text-gray-900">{stats.classi}</p>
-                        <p className="text-xs text-gray-500">Classi</p>
+                        <p className="text-2xl font-bold text-fg">{stats.classi}</p>
+                        <p className="text-xs text-fg-muted">Classi</p>
                       </div>
                       <div>
-                        <p className="text-2xl font-bold text-gray-900">{stats.totPercorsi}</p>
-                        <p className="text-xs text-gray-500">Percorsi</p>
+                        <p className="text-2xl font-bold text-fg">{stats.totPercorsi}</p>
+                        <p className="text-xs text-fg-muted">Percorsi</p>
                       </div>
                       <div>
-                        <p className="text-2xl font-bold text-gray-900">{stats.totLezioni}</p>
-                        <p className="text-xs text-gray-500">Lezioni totali</p>
+                        <p className="text-2xl font-bold text-fg">{stats.totLezioni}</p>
+                        <p className="text-xs text-fg-muted">Lezioni totali</p>
                       </div>
                       <div>
-                        <p className="text-2xl font-bold text-green-600">{stats.lezioniSvolte}</p>
-                        <p className="text-xs text-gray-500">Svolte</p>
+                        <p className="text-2xl font-bold text-accent">{stats.lezioniSvolte}</p>
+                        <p className="text-xs text-fg-muted">Svolte</p>
                       </div>
                       <div>
-                        <p className="text-2xl font-bold text-red-500">{stats.lezioniSaltate}</p>
-                        <p className="text-xs text-gray-500">Saltate</p>
+                        <p className="text-2xl font-bold text-danger">{stats.lezioniSaltate}</p>
+                        <p className="text-xs text-fg-muted">Saltate</p>
                       </div>
                     </div>
                   </div>
@@ -245,31 +245,31 @@ export default function ArchivioPage() {
                 <button
                   onClick={() => setCloneConfirm(selectedAnno)}
                   disabled={cloning || percorsi.length === 0}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  className="px-4 py-2 bg-link text-white text-sm font-medium rounded-sm hover:bg-link/80 disabled:opacity-50"
                 >
                   {cloning ? 'Clonazione...' : `Clona percorsi in ${annoAttivo}`}
                 </button>
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-fg-subtle">
                   Copia tutti i percorsi e le unita nell'anno corrente (senza lezioni)
                 </span>
               </div>
 
               {/* Percorsi per classe */}
               {Object.keys(percorsiPerClasse).length === 0 ? (
-                <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
-                  <p className="text-sm text-gray-400">Nessun percorso in questo anno scolastico.</p>
+                <div className="bg-surface rounded-sm border border-edge p-6 text-center">
+                  <p className="text-sm text-fg-subtle">Nessun percorso in questo anno scolastico.</p>
                 </div>
               ) : (
                 Object.entries(percorsiPerClasse)
                   .sort(([a], [b]) => a.localeCompare(b))
                   .map(([classe, classPercorsi]) => (
                     <div key={classe}>
-                      <h3 className="text-sm font-semibold text-gray-600 mb-2 flex items-center gap-2">
-                        <span className="bg-gray-200 text-gray-700 px-2 py-0.5 rounded text-xs font-bold">
+                      <h3 className="text-sm font-semibold text-fg-muted mb-2 flex items-center gap-2">
+                        <span className="bg-edge text-fg px-2 py-0.5 rounded text-xs font-bold">
                           {classe}
                         </span>
                         {assegnazioni.find((a) => a.classe === classe)?.materia && (
-                          <span className="text-xs font-normal text-gray-400">
+                          <span className="text-xs font-normal text-fg-subtle">
                             {assegnazioni.find((a) => a.classe === classe).materia}
                           </span>
                         )}
@@ -286,15 +286,15 @@ export default function ArchivioPage() {
                           return (
                             <div
                               key={p.id}
-                              className="bg-white rounded-lg border border-gray-200 overflow-hidden"
+                              className="bg-surface rounded-sm border border-edge overflow-hidden"
                             >
                               {/* Header */}
                               <div
-                                className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50"
+                                className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-overlay"
                                 onClick={() => setExpandedPercorso(isExpanded ? null : p.id)}
                               >
                                 <svg
-                                  className={`w-4 h-4 text-gray-400 transition-transform shrink-0 ${
+                                  className={`w-4 h-4 text-fg-subtle transition-transform shrink-0 ${
                                     isExpanded ? 'rotate-90' : ''
                                   }`}
                                   fill="none"
@@ -306,24 +306,24 @@ export default function ArchivioPage() {
                                 </svg>
 
                                 <div className="flex-1 min-w-0">
-                                  <h4 className="text-sm font-semibold text-gray-900">{p.titolo}</h4>
+                                  <h4 className="text-sm font-semibold text-fg">{p.titolo}</h4>
                                   {p.descrizione && (
-                                    <p className="text-xs text-gray-500 truncate">{p.descrizione}</p>
+                                    <p className="text-xs text-fg-muted truncate">{p.descrizione}</p>
                                   )}
                                 </div>
 
                                 {/* Mini stats */}
                                 <div className="flex items-center gap-3 shrink-0">
-                                  <span className="text-xs text-gray-400">
+                                  <span className="text-xs text-fg-subtle">
                                     {stats.unitaCompletate}/{stats.totaleUnita} unita
                                   </span>
-                                  <span className="text-xs text-gray-400">
+                                  <span className="text-xs text-fg-subtle">
                                     {stats.oreSvolte}/{stats.orePreviste}h
                                   </span>
                                   {/* Mini progress */}
-                                  <div className="w-16 bg-gray-200 rounded-full h-1.5">
+                                  <div className="w-16 bg-edge rounded-full h-1.5">
                                     <div
-                                      className="bg-green-500 h-1.5 rounded-full"
+                                      className="bg-accent h-1.5 rounded-full"
                                       style={{ width: `${pct}%` }}
                                     />
                                   </div>
@@ -332,7 +332,7 @@ export default function ArchivioPage() {
 
                               {/* Expanded unita */}
                               {isExpanded && stats.unita.length > 0 && (
-                                <div className="border-t border-gray-100 px-4 py-3">
+                                <div className="border-t border-edge-muted px-4 py-3">
                                   <div className="space-y-1.5">
                                     {stats.unita.map((u, idx) => {
                                       const unitLezioni = lezioni.filter(
@@ -342,30 +342,30 @@ export default function ArchivioPage() {
 
                                       return (
                                         <div key={u.id} className="flex items-center gap-2 text-xs">
-                                          <span className="text-gray-400 font-mono w-6 shrink-0">
+                                          <span className="text-fg-subtle font-mono w-6 shrink-0">
                                             {idx + 1}.
                                           </span>
                                           <span
                                             className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
                                               u.stato === STATO_UNITA.COMPLETATA
-                                                ? 'bg-green-100 text-green-700'
+                                                ? 'bg-badge-s text-accent'
                                                 : u.stato === STATO_UNITA.IN_CORSO
-                                                  ? 'bg-yellow-100 text-yellow-700'
-                                                  : 'bg-gray-100 text-gray-600'
+                                                  ? 'bg-badge-warn text-warn'
+                                                  : 'bg-overlay text-fg-muted'
                                             }`}
                                           >
                                             {STATO_UNITA_LABEL[u.stato] || 'Da fare'}
                                           </span>
                                           <span className={`flex-1 ${
                                             u.stato === STATO_UNITA.COMPLETATA
-                                              ? 'text-gray-400 line-through'
-                                              : 'text-gray-700'
+                                              ? 'text-fg-subtle line-through'
+                                              : 'text-fg'
                                           }`}>
                                             {u.titolo}
                                           </span>
-                                          <span className="text-gray-400 shrink-0">
+                                          <span className="text-fg-subtle shrink-0">
                                             {unitOre > 0 && (
-                                              <span className="text-green-600">{unitOre}/</span>
+                                              <span className="text-accent">{unitOre}/</span>
                                             )}
                                             {u.orePreviste || 0}h
                                           </span>

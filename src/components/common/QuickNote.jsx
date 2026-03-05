@@ -59,7 +59,7 @@ export default function QuickNote({ value, onSave, placeholder = 'Aggiungi nota.
       <button
         type="button"
         onClick={handleClick}
-        className="w-full text-left text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded px-2 py-1 transition-colors italic"
+        className="w-full text-left text-xs text-fg-subtle hover:text-fg-muted hover:bg-overlay rounded px-2 py-1 transition-colors italic"
       >
         {text || placeholder}
       </button>
@@ -75,7 +75,7 @@ export default function QuickNote({ value, onSave, placeholder = 'Aggiungi nota.
       onKeyDown={handleKeyDown}
       rows={2}
       placeholder={placeholder}
-      className="w-full px-2 py-1 text-xs border border-blue-300 rounded bg-blue-50/30 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none resize-none"
+      className="w-full px-2 py-1 text-xs border border-link/40 rounded bg-surface focus:ring-1 focus:ring-link/40 focus:border-link outline-none resize-none text-fg"
     />
   )
 }

@@ -6,17 +6,17 @@ import { onPercorsi, onLezioni, onUnita } from '../../lib/firestore'
 const TYPE_CONFIG = {
   percorso: {
     label: 'Percorso',
-    color: 'text-blue-600 bg-blue-50',
+    color: 'text-link bg-badge-p',
     icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
   },
   unita: {
     label: 'Unita',
-    color: 'text-purple-600 bg-purple-50',
+    color: 'text-special bg-badge-special',
     icon: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z',
   },
   lezione: {
     label: 'Lezione',
-    color: 'text-green-600 bg-green-50',
+    color: 'text-accent bg-badge-s',
     icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
   },
 }
@@ -173,7 +173,7 @@ export default function GlobalSearch() {
       {/* Search input */}
       <div className="relative">
         <svg
-          className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none"
+          className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-fg-subtle pointer-events-none"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -192,12 +192,12 @@ export default function GlobalSearch() {
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => { if (results.length > 0) setOpen(true) }}
           placeholder="Cerca percorsi, unita, lezioni..."
-          className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
+          className="w-full pl-10 pr-4 py-2.5 bg-inset border border-edge rounded text-sm text-fg placeholder-fg-subtle focus:outline-none focus:ring-1 focus:ring-link/40 focus:border-link"
         />
         {query && (
           <button
             onClick={() => { setQuery(''); setResults([]); setOpen(false) }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg-muted"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -208,9 +208,9 @@ export default function GlobalSearch() {
 
       {/* Results dropdown */}
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-80 overflow-y-auto">
+        <div className="absolute z-50 mt-1 w-full bg-surface border border-edge rounded-sm max-h-80 overflow-y-auto">
           {results.length === 0 ? (
-            <div className="px-4 py-3 text-sm text-gray-500">Nessun risultato</div>
+            <div className="px-4 py-3 text-sm text-fg-muted">Nessun risultato</div>
           ) : (
             <ul>
               {results.map((r, i) => {
@@ -219,10 +219,10 @@ export default function GlobalSearch() {
                   <li key={`${r.type}-${r.id}-${i}`}>
                     <button
                       onClick={() => handleSelect(r)}
-                      className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-start gap-3 transition-colors border-b border-gray-100 last:border-b-0"
+                      className="w-full text-left px-4 py-3 hover:bg-overlay flex items-start gap-3 transition-colors border-b border-edge-muted last:border-b-0"
                     >
                       {/* Type icon */}
-                      <span className={`mt-0.5 shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-lg ${cfg.color}`}>
+                      <span className={`mt-0.5 shrink-0 inline-flex items-center justify-center w-7 h-7 rounded ${cfg.color}`}>
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d={cfg.icon} />
                         </svg>
@@ -231,17 +231,17 @@ export default function GlobalSearch() {
                       {/* Content */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-gray-900 truncate">{r.title}</span>
+                          <span className="text-sm font-medium text-fg truncate">{r.title}</span>
                           {r.classe && (
-                            <span className="shrink-0 text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">
+                            <span className="shrink-0 text-xs px-1.5 py-0.5 bg-overlay text-fg-muted rounded font-mono">
                               {r.classe}
                             </span>
                           )}
                         </div>
                         {r.parentTitle && (
-                          <div className="text-xs text-gray-400 truncate">{cfg.label} in {r.parentTitle}</div>
+                          <div className="text-xs text-fg-subtle truncate">{cfg.label} in {r.parentTitle}</div>
                         )}
-                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{r.preview}</p>
+                        <p className="text-xs text-fg-muted mt-0.5 line-clamp-1">{r.preview}</p>
                       </div>
                     </button>
                   </li>

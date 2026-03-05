@@ -3,9 +3,9 @@ import { onUnita, onLezioniByPercorso, addUnita } from '../../lib/firestore'
 import { STATO_UNITA, STATO_UNITA_LABEL, STATO_LEZIONE } from '../../lib/costanti'
 
 const STATO_DOT = {
-  [STATO_UNITA.DA_FARE]: 'bg-gray-300',
-  [STATO_UNITA.IN_CORSO]: 'bg-yellow-400',
-  [STATO_UNITA.COMPLETATA]: 'bg-green-500',
+  [STATO_UNITA.DA_FARE]: 'bg-fg-subtle',
+  [STATO_UNITA.IN_CORSO]: 'bg-warn',
+  [STATO_UNITA.COMPLETATA]: 'bg-accent',
 }
 
 /**
@@ -92,7 +92,7 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
   if (percorsi.length === 0) {
     return (
       <div className="py-2">
-        <p className="text-xs text-gray-400 italic">
+        <p className="text-xs text-fg-subtle italic">
           Nessun percorso per questa classe. Creane uno nella pagina Percorsi.
         </p>
       </div>
@@ -102,13 +102,13 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <label className="block text-xs font-medium text-gray-600">
+        <label className="block text-xs font-medium text-fg-muted">
           Collega a un percorso
         </label>
         {percorsoId && (
           <button
             onClick={handleDeselectAll}
-            className="text-xs text-red-500 hover:text-red-700"
+            className="text-xs text-danger hover:text-danger/80"
           >
             Scollega
           </button>
@@ -133,20 +133,20 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
           return (
             <div
               key={p.id}
-              className={`rounded-lg border overflow-hidden transition-colors ${
+              className={`rounded-sm border overflow-hidden transition-colors ${
                 hasSelectedUnit
-                  ? 'border-blue-300 bg-blue-50'
-                  : 'border-gray-200 bg-gray-50'
+                  ? 'border-link/40 bg-badge-p'
+                  : 'border-edge bg-overlay'
               }`}
             >
               {/* Percorso header */}
               <button
                 type="button"
                 onClick={() => setExpandedPercorsoId(isExpanded ? null : p.id)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-100"
+                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface"
               >
                 <svg
-                  className={`w-3 h-3 text-gray-400 transition-transform shrink-0 ${
+                  className={`w-3 h-3 text-fg-subtle transition-transform shrink-0 ${
                     isExpanded ? 'rotate-90' : ''
                   }`}
                   fill="none"
@@ -157,18 +157,18 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
 
-                <span className="text-xs font-semibold text-gray-800 flex-1 truncate">
+                <span className="text-xs font-semibold text-fg flex-1 truncate">
                   {p.titolo}
                 </span>
 
                 {/* Mini progress */}
                 {totaleUnita > 0 && (
-                  <span className="text-[10px] text-gray-400 shrink-0">
+                  <span className="text-[10px] text-fg-subtle shrink-0 font-mono">
                     {completate}/{totaleUnita} unita
                   </span>
                 )}
                 {orePianificate > 0 && (
-                  <span className="text-[10px] text-gray-400 shrink-0">
+                  <span className="text-[10px] text-fg-subtle shrink-0 font-mono">
                     {oreReali}/{orePianificate}h
                   </span>
                 )}
@@ -176,9 +176,9 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
 
               {/* Units list */}
               {isExpanded && (
-                <div className="border-t border-gray-200">
+                <div className="border-t border-edge">
                   {units.length === 0 && addingToPercorso !== p.id ? (
-                    <p className="px-3 py-2 text-xs text-gray-400 italic">
+                    <p className="px-3 py-2 text-xs text-fg-subtle italic">
                       Nessuna unita in questo percorso.
                     </p>
                   ) : (
@@ -201,8 +201,8 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
                             onClick={() => handleSelectUnit(p.id, u.id, u.titolo)}
                             className={`w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors ${
                               isSelected
-                                ? 'bg-blue-100'
-                                : 'hover:bg-gray-100'
+                                ? 'bg-badge-p'
+                                : 'hover:bg-surface'
                             }`}
                           >
                             {/* Status dot */}
@@ -212,7 +212,7 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
                             />
 
                             {/* Order number */}
-                            <span className="text-[10px] text-gray-400 font-mono w-4 shrink-0">
+                            <span className="text-[10px] text-fg-subtle font-mono w-4 shrink-0">
                               {u.ordine || '·'}
                             </span>
 
@@ -220,19 +220,19 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
                             <span
                               className={`text-xs flex-1 truncate ${
                                 isSelected
-                                  ? 'font-semibold text-blue-800'
+                                  ? 'font-semibold text-link'
                                   : u.stato === STATO_UNITA.COMPLETATA
-                                    ? 'text-gray-400 line-through'
-                                    : 'text-gray-700'
+                                    ? 'text-fg-subtle line-through'
+                                    : 'text-fg'
                               }`}
                             >
                               {u.titolo}
                             </span>
 
                             {/* Hours: real / planned */}
-                            <span className="text-[10px] text-gray-400 shrink-0">
+                            <span className="text-[10px] text-fg-subtle shrink-0 font-mono">
                               {unitOreReali > 0 && (
-                                <span className="text-green-600 font-medium">{unitOreReali}/</span>
+                                <span className="text-accent font-medium">{unitOreReali}/</span>
                               )}
                               {u.orePreviste || 0}h
                             </span>
@@ -240,7 +240,7 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
                             {/* Selected check */}
                             {isSelected && (
                               <svg
-                                className="w-3.5 h-3.5 text-blue-600 shrink-0"
+                                className="w-3.5 h-3.5 text-link shrink-0"
                                 fill="none"
                                 viewBox="0 0 24 24"
                                 stroke="currentColor"
@@ -261,7 +261,7 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
 
                   {/* Inline add-unita form */}
                   {addingToPercorso === p.id ? (
-                    <div className="px-3 py-2 border-t border-dashed border-gray-200 bg-green-50">
+                    <div className="px-3 py-2 border-t border-dashed border-edge bg-badge-s/30">
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
@@ -273,7 +273,7 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
                           }}
                           placeholder="Titolo nuova unita..."
                           autoFocus
-                          className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                          className="flex-1 px-2 py-1 border border-edge rounded text-xs text-fg bg-surface focus:ring-1 focus:ring-accent/40 focus:border-accent outline-none"
                         />
                         <input
                           type="number"
@@ -284,15 +284,15 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
                             if (e.key === 'Escape') { setAddingToPercorso(null); setNewUnitaForm({ titolo: '', orePreviste: 1 }) }
                           }}
                           min="1"
-                          className="w-12 px-1 py-1 border border-gray-300 rounded text-xs text-center focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                          className="w-12 px-1 py-1 border border-edge rounded text-xs text-fg bg-surface text-center font-mono focus:ring-1 focus:ring-accent/40 focus:border-accent outline-none"
                           title="Ore previste"
                         />
-                        <span className="text-[10px] text-gray-400">h</span>
+                        <span className="text-[10px] text-fg-subtle">h</span>
                         <button
                           type="button"
                           onClick={() => handleAddUnita(p.id)}
                           disabled={!newUnitaForm.titolo.trim() || savingUnita}
-                          className="p-1 text-green-600 hover:text-green-800 disabled:opacity-40"
+                          className="p-1 text-accent hover:text-accent/80 disabled:opacity-40"
                           title="Aggiungi"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -302,7 +302,7 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
                         <button
                           type="button"
                           onClick={() => { setAddingToPercorso(null); setNewUnitaForm({ titolo: '', orePreviste: 1 }) }}
-                          className="p-1 text-gray-400 hover:text-gray-600"
+                          className="p-1 text-fg-subtle hover:text-fg-muted"
                           title="Annulla"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -315,7 +315,7 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
                     <button
                       type="button"
                       onClick={() => { setAddingToPercorso(p.id); setNewUnitaForm({ titolo: '', orePreviste: 1 }) }}
-                      className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors border-t border-dashed border-gray-200"
+                      className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs text-fg-subtle hover:text-accent hover:bg-badge-s/30 transition-colors border-t border-dashed border-edge"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />

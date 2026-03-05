@@ -1,17 +1,79 @@
 @import "tailwindcss";
 
+@theme {
+  /* Surfaces */
+  --color-canvas: #0d1117;
+  --color-surface: #161b22;
+  --color-overlay: #1c2128;
+  --color-inset: #010409;
+
+  /* Borders */
+  --color-edge: #30363d;
+  --color-edge-muted: #21262d;
+
+  /* Text */
+  --color-fg: #e6edf3;
+  --color-fg-muted: #7d8590;
+  --color-fg-subtle: #484f58;
+
+  /* Functional accents */
+  --color-accent: #3fb950;
+  --color-link: #58a6ff;
+  --color-danger: #f85149;
+  --color-warn: #d29922;
+  --color-special: #bc8cff;
+  --color-highlight: #39d2c0;
+
+  /* Status badge backgrounds */
+  --color-badge-p: #121d2f;
+  --color-badge-s: #0d2818;
+  --color-badge-x: #2d1215;
+  --color-badge-warn: #2a1e04;
+  --color-badge-special: #1e1533;
+
+  /* Fonts */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
+  background-color: var(--color-canvas);
+  color: var(--color-fg);
 }
 
+/* Animations */
 @keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(1rem);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 0; transform: translateX(1rem); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Terminal cursor */
+.cursor-blink::after {
+  content: '_';
+  animation: blink 1s step-end infinite;
+  color: var(--color-accent);
+  margin-left: 2px;
+}
+
+/* Scrollbar styling for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-canvas);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-edge);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-fg-subtle);
 }

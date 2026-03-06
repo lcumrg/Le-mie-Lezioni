@@ -1,9 +1,10 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
-import { onVacanze, addVacanza, deleteVacanza, updateVacanza } from '../lib/firestore'
+import { onVacanze, addVacanza, deleteVacanza } from '../lib/firestore'
 import { TIPO_VACANZA, TIPO_VACANZA_LABEL } from '../lib/costanti'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import ConfirmDialog from '../components/common/ConfirmDialog'
 
 const MESI = [
   'Settembre', 'Ottobre', 'Novembre', 'Dicembre',
@@ -59,8 +60,12 @@ function getColorFor(tipo) {
   return TIPO_COLORS[tipo] || TIPO_COLORS[TIPO_VACANZA.VACANZA]
 }
 
+// Local date format (NO UTC conversion — avoids off-by-one timezone bug)
 function fmt(date) {
-  return date.toISOString().slice(0, 10)
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 function getMonthGrid(year, month) {
@@ -81,6 +86,8 @@ export default function AssenzePage() {
   const [brush, setBrush] = useState(TIPO_VACANZA.VACANZA)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ nome: '', dataInizio: '', dataFine: '', tipo: TIPO_VACANZA.VACANZA })
+  const [clearConfirm, setClearConfirm] = useState(false)
+  const [clearing, setClearing] = useState(false)
 
   useEffect(() => {
     if (!annoAttivo) return
@@ -91,11 +98,10 @@ export default function AssenzePage() {
   const vacanzeMap = useMemo(() => {
     const map = new Map()
     for (const v of vacanze) {
-      const d = new Date(v.dataInizio + 'T00:00:00')
-      const end = new Date(v.dataFine + 'T00:00:00')
+      const d = new Date(v.dataInizio + 'T12:00:00')
+      const end = new Date(v.dataFine + 'T12:00:00')
       while (d <= end) {
         const key = fmt(d)
-        // If multiple vacanze overlap, prefer the first one found
         if (!map.has(key)) map.set(key, v)
         d.setDate(d.getDate() + 1)
       }
@@ -106,11 +112,10 @@ export default function AssenzePage() {
   // Counters
   const counters = useMemo(() => {
     const counts = {}
-    // Count unique days per type
     const daysByType = {}
     for (const v of vacanze) {
-      const d = new Date(v.dataInizio + 'T00:00:00')
-      const end = new Date(v.dataFine + 'T00:00:00')
+      const d = new Date(v.dataInizio + 'T12:00:00')
+      const end = new Date(v.dataFine + 'T12:00:00')
       if (!daysByType[v.tipo]) daysByType[v.tipo] = new Set()
       while (d <= end) {
         daysByType[v.tipo].add(fmt(d))
@@ -139,9 +144,7 @@ export default function AssenzePage() {
       if (parts.length >= 2) endMonth = Number(parts[1]) - 1
     }
     const result = []
-    // September(8) to December(11)
     for (let m = 8; m <= 11; m++) result.push({ year: startYear, month: m })
-    // January(0) to end month
     for (let m = 0; m <= endMonth; m++) result.push({ year: endYear, month: m })
     return result
   }, [annoAttivo, annoConfig?.dataFineScuola])
@@ -153,19 +156,14 @@ export default function AssenzePage() {
     const existing = vacanzeMap.get(key)
 
     if (existing) {
-      // If single-day entry, toggle it off
-      if (existing.dataInizio === existing.dataFine) {
-        try {
-          await deleteVacanza(existing.id)
-        } catch {
-          toast.error('Errore nella rimozione')
+      // Always allow removing — delete the vacanza doc
+      try {
+        await deleteVacanza(existing.id)
+        if (existing.dataInizio !== existing.dataFine) {
+          toast.success(`Rimosso periodo "${existing.nome}"`)
         }
-      } else if (existing.tipo !== brush) {
-        // Part of a multi-day range with different type, show info
-        toast.info(`Questo giorno fa parte di "${existing.nome}" (${existing.dataInizio} - ${existing.dataFine}). Gestiscilo dalla lista periodi.`)
-      } else {
-        // Same type, part of range: show info
-        toast.info(`Parte di "${existing.nome}". Per rimuoverlo, elimina il periodo dalla lista.`)
+      } catch {
+        toast.error('Errore nella rimozione')
       }
       return
     }
@@ -215,6 +213,19 @@ export default function AssenzePage() {
     }
   }
 
+  async function handleClearAll() {
+    setClearConfirm(false)
+    setClearing(true)
+    try {
+      await Promise.all(vacanze.map((v) => deleteVacanza(v.id)))
+      toast.success('Tutte le assenze sono state rimosse')
+    } catch {
+      toast.error("Errore durante la rimozione")
+    } finally {
+      setClearing(false)
+    }
+  }
+
   if (configLoading) return <LoadingSpinner />
 
   if (!annoAttivo) {
@@ -235,7 +246,18 @@ export default function AssenzePage() {
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-fg">Assenze</h1>
-        <span className="text-sm text-fg-muted font-mono">{annoAttivo}</span>
+        <div className="flex items-center gap-3">
+          {vacanze.length > 0 && (
+            <button
+              onClick={() => setClearConfirm(true)}
+              disabled={clearing}
+              className="px-3 py-1.5 text-xs font-medium text-danger/70 hover:text-danger border border-danger/30 rounded-sm hover:bg-danger/10 transition-colors disabled:opacity-50"
+            >
+              {clearing ? 'Rimozione...' : 'Svuota tutte'}
+            </button>
+          )}
+          <span className="text-sm text-fg-muted font-mono">{annoAttivo}</span>
+        </div>
       </div>
 
       {/* Brush selector + counters */}
@@ -292,6 +314,10 @@ export default function AssenzePage() {
             <span className="text-fg-subtle">gg</span>
           </div>
         </div>
+
+        <p className="text-xs text-fg-subtle">
+          Clicca su un giorno per segnare un'assenza. Clicca di nuovo per rimuoverla.
+        </p>
       </div>
 
       {/* Add period form (collapsible) */}
@@ -388,7 +414,7 @@ export default function AssenzePage() {
                       key={key}
                       onClick={() => !isSunday && handleDayClick(date)}
                       disabled={isSunday}
-                      title={vac ? `${TIPO_VACANZA_LABEL[vac.tipo] || vac.tipo}${vac.dataInizio !== vac.dataFine ? ` — ${vac.nome}` : ''}` : undefined}
+                      title={vac ? `${TIPO_VACANZA_LABEL[vac.tipo] || vac.tipo}${vac.dataInizio !== vac.dataFine ? ` — ${vac.nome}` : ''} (clicca per rimuovere)` : undefined}
                       className={`
                         relative aspect-square flex items-center justify-center text-xs rounded-sm transition-all
                         ${isSunday ? 'text-fg-subtle/40 cursor-default' : 'cursor-pointer'}
@@ -442,6 +468,16 @@ export default function AssenzePage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={clearConfirm}
+        title="Svuota tutte le assenze"
+        message={`Vuoi rimuovere tutte le ${vacanze.length} assenze dell'anno ${annoAttivo}?`}
+        confirmText="Svuota tutte"
+        danger
+        onConfirm={handleClearAll}
+        onCancel={() => setClearConfirm(false)}
+      />
     </div>
   )
 }

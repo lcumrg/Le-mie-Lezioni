@@ -51,9 +51,11 @@ export default function LessonGrid({
   const [selectedKey, setSelectedKey] = useState(null)
   const [editNote, setEditNote] = useState('')
   const [editTitolo, setEditTitolo] = useState('')
+  const [saveStatus, setSaveStatus] = useState(null) // null | 'saving' | 'saved'
   const gridRef = useRef(null)
   const noteDebounceRef = useRef(null)
   const titoloDebounceRef = useRef(null)
+  const saveStatusRef = useRef(null)
 
   const selectedLez = selectedKey ? lessonGrid[selectedKey] : null
 
@@ -69,11 +71,24 @@ export default function LessonGrid({
     }
   }, [selectedKey])
 
+  // Wrapped save with indicator
+  function quickSaveWithIndicator(id, updates) {
+    setSaveStatus('saving')
+    clearTimeout(saveStatusRef.current)
+    onQuickSave(id, updates)
+    // Assume success (Firestore is fast enough)
+    saveStatusRef.current = setTimeout(() => {
+      setSaveStatus('saved')
+      saveStatusRef.current = setTimeout(() => setSaveStatus(null), 1500)
+    }, 300)
+  }
+
   // Cleanup debounce on unmount
   useEffect(() => {
     return () => {
       clearTimeout(noteDebounceRef.current)
       clearTimeout(titoloDebounceRef.current)
+      clearTimeout(saveStatusRef.current)
     }
   }, [])
 
@@ -90,7 +105,7 @@ export default function LessonGrid({
       const currentTitolo = titoloEl ? titoloEl.value.trim() : editTitolo.trim()
       if (currentNote !== (lez.note || '').trim()) updates.note = currentNote
       if (currentTitolo !== (lez.titoloOverride || '').trim()) updates.titoloOverride = currentTitolo
-      if (Object.keys(updates).length > 0) onQuickSave(lez.id, updates)
+      if (Object.keys(updates).length > 0) quickSaveWithIndicator(lez.id, updates)
     },
     [editNote, editTitolo, onQuickSave]
   )
@@ -109,7 +124,8 @@ export default function LessonGrid({
   function handleClose() {
     savePendingEdits(selectedLez)
     setSelectedKey(null)
-    gridRef.current?.focus()
+    setSaveStatus(null)
+    setTimeout(() => gridRef.current?.focus(), 0)
   }
 
   function handleKeyDown(e) {
@@ -191,6 +207,33 @@ export default function LessonGrid({
           onStatoChange(selectedLez.id, STATO_LEZIONE.SALTATA)
         }
         break
+      case 'Tab': {
+        e.preventDefault()
+        const dayIdx2 = parseInt(selectedKey.split('_')[0])
+        const oraNum2 = parseInt(selectedKey.split('_')[1])
+        const dIdx = validDays.indexOf(dayIdx2)
+        const oIdx = validOre.indexOf(oraNum2)
+        if (e.shiftKey) {
+          // Shift+Tab: previous cell
+          if (oIdx > 0) {
+            savePendingEdits(selectedLez)
+            setSelectedKey(`${dayIdx2}_${validOre[oIdx - 1]}`)
+          } else if (dIdx > 0) {
+            savePendingEdits(selectedLez)
+            setSelectedKey(`${validDays[dIdx - 1]}_${validOre[validOre.length - 1]}`)
+          }
+        } else {
+          // Tab: next cell
+          if (oIdx < validOre.length - 1) {
+            savePendingEdits(selectedLez)
+            setSelectedKey(`${dayIdx2}_${validOre[oIdx + 1]}`)
+          } else if (dIdx < validDays.length - 1) {
+            savePendingEdits(selectedLez)
+            setSelectedKey(`${validDays[dIdx + 1]}_${validOre[0]}`)
+          }
+        }
+        break
+      }
     }
   }
 
@@ -198,9 +241,12 @@ export default function LessonGrid({
     const val = e.target.value
     setEditNote(val)
     clearTimeout(noteDebounceRef.current)
+    setSaveStatus('saving')
     noteDebounceRef.current = setTimeout(() => {
       if (selectedLez && val.trim() !== (selectedLez.note || '').trim()) {
-        onQuickSave(selectedLez.id, { note: val.trim() })
+        quickSaveWithIndicator(selectedLez.id, { note: val.trim() })
+      } else {
+        setSaveStatus(null)
       }
     }, 1000)
   }
@@ -209,9 +255,12 @@ export default function LessonGrid({
     const val = e.target.value
     setEditTitolo(val)
     clearTimeout(titoloDebounceRef.current)
+    setSaveStatus('saving')
     titoloDebounceRef.current = setTimeout(() => {
       if (selectedLez && val.trim() !== (selectedLez.titoloOverride || '').trim()) {
-        onQuickSave(selectedLez.id, { titoloOverride: val.trim() })
+        quickSaveWithIndicator(selectedLez.id, { titoloOverride: val.trim() })
+      } else {
+        setSaveStatus(null)
       }
     }, 1000)
   }
@@ -223,7 +272,7 @@ export default function LessonGrid({
       updates.titoloOverride = unitaTitolo || ''
       setEditTitolo(unitaTitolo || '')
     }
-    onQuickSave(selectedLez.id, updates)
+    quickSaveWithIndicator(selectedLez.id, updates)
   }
 
   function renderCell(lez) {
@@ -380,7 +429,7 @@ export default function LessonGrid({
               {giornoLibero !== null && (
                 <span>{GIORNI_LABEL[giornoLibero]}: giorno libero · </span>
               )}
-              Frecce: naviga · S/P/X: stato · Esc: chiudi
+              Frecce: naviga · Tab: prossima · S/P/X: stato · Esc: chiudi
             </span>
           }
         />
@@ -397,6 +446,13 @@ export default function LessonGrid({
               <span className="text-xs text-fg-subtle font-mono">
                 {selectedLez.oraInizio} – {selectedLez.oraFine}
               </span>
+              {saveStatus && (
+                <span className={`text-[10px] font-medium ml-2 ${
+                  saveStatus === 'saving' ? 'text-warn' : 'text-accent'
+                }`}>
+                  {saveStatus === 'saving' ? 'Salvando...' : 'Salvato'}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {/* Status buttons */}

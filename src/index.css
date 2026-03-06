@@ -55,6 +55,26 @@ body {
   50% { opacity: 0; }
 }
 
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes flashSave {
+  0% { background-color: var(--color-accent); opacity: 0.15; }
+  100% { opacity: 0; }
+}
+
+/* Flash save effect (like Excel) */
+.flash-save {
+  animation: flashSave 0.6s ease-out;
+}
+
+/* Smooth transition for panels */
+.slide-panel-enter {
+  animation: slideInRight 0.2s ease-out;
+}
+
 /* Terminal cursor */
 .cursor-blink::after {
   content: '_';

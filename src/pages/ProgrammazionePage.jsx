@@ -1,14 +1,14 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Link } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
-import { STATO_UNITA, GIORNI_SHORT } from '../lib/costanti'
+import { STATO_UNITA, STATO_LEZIONE, GIORNI_SHORT, ORE_EFFETTIVE } from '../lib/costanti'
 import {
   onAssegnazioni,
   onOrari,
   onPercorsi,
   onUnita,
   onVacanze,
+  onLezioni,
   onDistribuzioni,
   setDistribuzioniClasse,
   onRicorrenze,
@@ -25,6 +25,8 @@ import {
 } from 'date-fns'
 import { it } from 'date-fns/locale'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import SlidePanel from '../components/common/SlidePanel'
+import UnitaPanel from '../components/percorsi/UnitaPanel'
 
 const STATO_UNITA_DOT = {
   [STATO_UNITA.DA_FARE]: 'bg-edge',
@@ -57,6 +59,9 @@ export default function ProgrammazionePage() {
   const [selectedMateria, setSelectedMateria] = useState(null)
   const [loading, setLoading] = useState(true)
   const [distributing, setDistributing] = useState(false)
+  const [slidePanelPercorso, setSlidePanelPercorso] = useState(null)
+  const [allLezioni, setAllLezioni] = useState([])
+  const [showConsuntivo, setShowConsuntivo] = useState(false)
 
   const giornoLibero = annoConfig?.giornoLibero ?? null
   const dataFineScuola = annoConfig?.dataFineScuola || null
@@ -78,6 +83,7 @@ export default function ProgrammazionePage() {
     unsubs.push(onOrari(annoAttivo, setOrari))
     unsubs.push(onPercorsi(annoAttivo, (all) => setAllPercorsi(all)))
     unsubs.push(onVacanze(annoAttivo, setVacanze))
+    unsubs.push(onLezioni(annoAttivo, setAllLezioni))
     unsubs.push(onDistribuzioni(setDistribuzioni))
     unsubs.push(onRicorrenze(setRicorrenze))
     return () => unsubs.forEach((u) => u())
@@ -134,6 +140,42 @@ export default function ProgrammazionePage() {
 
   // Total planned hours
   const orePianificate = allUnita.reduce((s, u) => s + (u.orePreviste || 0), 0)
+
+  // Lezioni for selected class+materia (Passo 2: bilancio vivente)
+  const classeLezioni = useMemo(() => {
+    if (!selectedClasse) return []
+    return allLezioni.filter((l) => l.classe === selectedClasse && l.materia === selectedMateria)
+  }, [allLezioni, selectedClasse, selectedMateria])
+
+  // Ore already done (from actual lezioni)
+  const oreSvolte = useMemo(() => {
+    return classeLezioni.reduce((s, l) => s + (ORE_EFFETTIVE[l.stato] || 0) * (l.ore || 1), 0)
+  }, [classeLezioni])
+
+  // Ore saltate
+  const oreSaltate = useMemo(() => {
+    return classeLezioni.filter((l) => l.stato === STATO_LEZIONE.SALTATA).reduce((s, l) => s + (l.ore || 1), 0)
+  }, [classeLezioni])
+
+  // Ore rimaste da fare
+  const oreRimasteDaFare = Math.max(0, orePianificate - oreSvolte)
+
+  // Consuntivo per settimana (lezioni raggruppate per settimana)
+  const consuntivoPerSettimana = useMemo(() => {
+    if (!showConsuntivo) return {}
+    const map = {} // weekStartStr -> { svolte, parziali, saltate, totale }
+    for (const lez of classeLezioni) {
+      const d = lez.data?.toDate ? lez.data.toDate() : new Date(lez.data)
+      const weekStart = startOfWeek(d, { weekStartsOn: 1 })
+      const key = format(weekStart, 'yyyy-MM-dd')
+      if (!map[key]) map[key] = { svolte: 0, parziali: 0, saltate: 0, totale: 0 }
+      map[key].totale += (lez.ore || 1)
+      if (lez.stato === STATO_LEZIONE.SVOLTA) map[key].svolte += (lez.ore || 1)
+      else if (lez.stato === STATO_LEZIONE.PARZIALE) map[key].parziali += (lez.ore || 1)
+      else if (lez.stato === STATO_LEZIONE.SALTATA) map[key].saltate += (lez.ore || 1)
+    }
+    return map
+  }, [classeLezioni, showConsuntivo])
 
   // ── Generate weeks from today to end of school ──
   const weeks = useMemo(() => {
@@ -268,6 +310,61 @@ export default function ProgrammazionePage() {
       await setRicorrenzeClasse(selectedClasse, newRic)
     } catch (err) {
       toast.error('Errore durante il salvataggio della ricorrenza.')
+    }
+  }
+
+  // ── Redistribute from current week forward (Passo 4) ──
+  async function handleAutoDistributeFromNow() {
+    if (!selectedClasse || allUnita.length === 0 || weeks.length === 0) return
+    setDistributing(true)
+
+    try {
+      const oggi = format(new Date(), 'yyyy-MM-dd')
+      const newDist = { ...classeDistribuzioni }
+
+      // Remove future assignments only
+      for (const week of weeks) {
+        if (week.startStr >= oggi) {
+          delete newDist[week.startStr]
+        }
+      }
+
+      // Find which unita are already completed or in progress
+      const completedUnitaIds = new Set(
+        allUnita.filter((u) => u.stato === STATO_UNITA.COMPLETATA).map((u) => u.id)
+      )
+      const remainingUnita = allUnita.filter((u) => !completedUnitaIds.has(u.id))
+
+      // Simple sequential distribution for remaining weeks
+      let unitaIndex = 0
+      let oreAccumulate = 0
+
+      for (const week of weeks) {
+        if (week.startStr < oggi) continue // Skip past weeks
+        if (week.oreDisponibili === 0) continue
+        if (unitaIndex >= remainingUnita.length) break
+
+        const unita = remainingUnita[unitaIndex]
+        newDist[week.startStr] = {
+          percorsoId: unita.percorsoId,
+          unitaId: unita.id,
+          percorsoTitolo: unita.percorsoTitolo,
+          unitaTitolo: unita.titolo,
+        }
+
+        oreAccumulate += week.oreDisponibili
+        if (oreAccumulate >= (unita.orePreviste || 1)) {
+          unitaIndex++
+          oreAccumulate = 0
+        }
+      }
+
+      await setDistribuzioniClasse(selectedClasse, newDist)
+      toast.success('Distribuzione aggiornata dalle settimane rimanenti')
+    } catch (err) {
+      toast.error('Errore durante la ridistribuzione.')
+    } finally {
+      setDistributing(false)
     }
   }
 
@@ -474,9 +571,9 @@ export default function ProgrammazionePage() {
         </div>
       </div>
 
-      {/* ── Ore summary banner ── */}
+      {/* ── Ore summary banner (4 cards) ── */}
       {dataFineScuola && selectedClasse && (
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           <div className="p-3 bg-surface rounded-sm border border-edge text-center">
             <div className="text-2xl font-bold text-link font-mono">{oreDisponibiliTotali}</div>
             <div className="text-xs text-fg-muted">Ore disponibili</div>
@@ -487,6 +584,14 @@ export default function ProgrammazionePage() {
             <div className="text-xs text-fg-muted">Ore pianificate</div>
             <div className="text-[10px] text-fg-subtle font-mono">{allUnita.length} unita totali</div>
           </div>
+          <div className="p-3 bg-surface rounded-sm border border-edge text-center">
+            <div className="text-2xl font-bold text-accent font-mono">{oreSvolte}</div>
+            <div className="text-xs text-fg-muted">Ore svolte</div>
+            <div className="text-[10px] text-fg-subtle font-mono">
+              {oreSaltate > 0 && <span className="text-danger">{oreSaltate}h saltate</span>}
+              {oreSaltate === 0 && `${classeLezioni.filter((l) => l.stato === STATO_LEZIONE.SVOLTA).length} lezioni`}
+            </div>
+          </div>
           <div className={`p-3 rounded-sm border text-center ${
             bilancioOre >= 0
               ? 'bg-badge-s border-accent/30'
@@ -495,13 +600,11 @@ export default function ProgrammazionePage() {
             <div className={`text-2xl font-bold font-mono ${bilancioOre >= 0 ? 'text-accent' : 'text-danger'}`}>
               {bilancioOre >= 0 ? '+' : ''}{bilancioOre}
             </div>
-            <div className="text-xs text-fg-muted">Bilancio ore</div>
+            <div className="text-xs text-fg-muted">Margine</div>
             <div className="text-[10px] text-fg-subtle">
-              {bilancioOre > 0
-                ? `Hai ${bilancioOre} ore di margine`
-                : bilancioOre === 0
-                  ? 'Perfettamente bilanciato'
-                  : `Mancano ${Math.abs(bilancioOre)} ore`}
+              {oreRimasteDaFare > 0
+                ? `${oreRimasteDaFare}h ancora da fare`
+                : 'Tutto completato'}
             </div>
           </div>
         </div>
@@ -593,25 +696,16 @@ export default function ProgrammazionePage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* ── LEFT: Read-only Percorsi summary panel ── */}
+        {/* ── LEFT: Percorsi summary panel (click to edit in SlidePanel) ── */}
         <div className="lg:col-span-1 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-fg">Percorsi</h2>
-            <Link
-              to="/percorsi"
-              className="text-sm text-link hover:text-link/80 font-medium"
-            >
-              Gestisci in Percorsi
-            </Link>
+            <span className="text-[10px] text-fg-subtle">click per modificare</span>
           </div>
 
-          {/* Percorsi list (read-only) */}
           {classePercorsi.length === 0 && (
             <p className="text-sm text-fg-subtle italic">
-              Nessun percorso per {selectedClasse} {selectedMateria}.{' '}
-              <Link to="/percorsi" className="text-link hover:text-link/80 not-italic">
-                Creane uno nella pagina Percorsi.
-              </Link>
+              Nessun percorso per {selectedClasse} {selectedMateria}.
             </p>
           )}
 
@@ -623,8 +717,16 @@ export default function ProgrammazionePage() {
             const inCorso = units.filter((u) => u.stato === STATO_UNITA.IN_CORSO).length
             const pct = units.length > 0 ? Math.round((completate / units.length) * 100) : 0
 
+            // Check for skipped hours (delay indicator)
+            const percLezioni = classeLezioni.filter((l) => l.percorsoId === p.id)
+            const percOreSaltate = percLezioni.filter((l) => l.stato === STATO_LEZIONE.SALTATA).reduce((s, l) => s + (l.ore || 1), 0)
+
             return (
-              <div key={p.id} className={`rounded-sm border ${color.border} overflow-hidden`}>
+              <div
+                key={p.id}
+                className={`rounded-sm border ${color.border} overflow-hidden cursor-pointer hover:ring-1 hover:ring-link/40 transition-shadow`}
+                onClick={() => setSlidePanelPercorso(p)}
+              >
                 {/* Percorso header */}
                 <div className={`px-3 py-2 ${color.bg}`}>
                   <div className="flex items-center justify-between">
@@ -643,15 +745,21 @@ export default function ProgrammazionePage() {
                       <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${pct}%` }} />
                     </div>
                   )}
+                  {/* Delay warning */}
+                  {percOreSaltate > 0 && (
+                    <div className="mt-1 text-[10px] text-danger font-medium">
+                      {percOreSaltate}h saltate — in ritardo
+                    </div>
+                  )}
                 </div>
 
-                {/* Unita list (read-only) */}
+                {/* Unita list (compact) */}
                 <div className="bg-surface">
                   {units.map((u) => (
                     <div key={u.id} className="flex items-center gap-2 px-3 py-1.5 border-t border-edge-muted text-xs">
                       <span className={`w-2 h-2 rounded-full shrink-0 ${STATO_UNITA_DOT[u.stato] || STATO_UNITA_DOT[STATO_UNITA.DA_FARE]}`} />
                       <span className="font-mono text-fg-subtle w-4 shrink-0">{u.ordine}</span>
-                      <span className="flex-1 text-fg truncate">{u.titolo}</span>
+                      <span className={`flex-1 truncate ${u.stato === STATO_UNITA.COMPLETATA ? 'text-fg-subtle line-through' : 'text-fg'}`}>{u.titolo}</span>
                       <span className="text-fg-subtle shrink-0 font-mono">{u.orePreviste || 0}h</span>
                     </div>
                   ))}
@@ -668,17 +776,38 @@ export default function ProgrammazionePage() {
 
         {/* ── RIGHT: Timeline ── */}
         <div className="lg:col-span-2">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
             <h2 className="text-lg font-semibold text-fg">Timeline</h2>
-            {allUnita.length > 0 && weeks.length > 0 && (
+            <div className="flex items-center gap-2">
               <button
-                onClick={handleAutoDistribute}
-                disabled={distributing}
-                className="px-3 py-1.5 bg-link text-white text-xs font-medium rounded-sm hover:bg-link/80 disabled:opacity-50"
+                onClick={() => setShowConsuntivo(!showConsuntivo)}
+                className={`px-2 py-1 text-xs font-medium rounded-sm border transition-colors ${
+                  showConsuntivo
+                    ? 'bg-accent/20 text-accent border-accent/30'
+                    : 'bg-overlay text-fg-muted border-edge-muted hover:text-fg'
+                }`}
               >
-                {distributing ? 'Distribuzione...' : 'Distribuisci automaticamente'}
+                Consuntivo
               </button>
-            )}
+              {allUnita.length > 0 && weeks.length > 0 && (
+                <>
+                  <button
+                    onClick={handleAutoDistributeFromNow}
+                    disabled={distributing}
+                    className="px-2 py-1 bg-special/20 text-special text-xs font-medium rounded-sm border border-special/30 hover:bg-special/30 disabled:opacity-50"
+                  >
+                    {distributing ? '...' : 'Ridistribuisci da oggi'}
+                  </button>
+                  <button
+                    onClick={handleAutoDistribute}
+                    disabled={distributing}
+                    className="px-2 py-1 bg-link text-white text-xs font-medium rounded-sm hover:bg-link/80 disabled:opacity-50"
+                  >
+                    {distributing ? '...' : 'Distribuisci tutto'}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
 
           {weeks.length === 0 ? (
@@ -697,28 +826,42 @@ export default function ProgrammazionePage() {
                     <th className="px-3 py-2 text-left text-xs font-medium text-fg-muted w-32">Settimana</th>
                     <th className="px-2 py-2 text-center text-xs font-medium text-fg-muted w-12">Ore</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-fg-muted">Attivita prevista</th>
+                    {showConsuntivo && (
+                      <th className="px-2 py-2 text-center text-xs font-medium text-fg-muted w-24">Effettivo</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
                   {weeks.map((week) => {
                     const assignment = classeDistribuzioni[week.startStr]
                     const color = assignment ? percorsoColorMap[assignment.percorsoId] : null
+                    const oggi = format(new Date(), 'yyyy-MM-dd')
+                    const isPast = week.startStr < oggi
+                    const isCurrent = !isPast && week.startStr <= format(addDays(new Date(), 6), 'yyyy-MM-dd')
+                    const consuntivo = consuntivoPerSettimana[week.startStr]
 
                     return (
                       <tr
                         key={week.startStr}
                         className={`border-b border-edge-muted last:border-b-0 ${
-                          week.isVacanza ? 'bg-badge-warn/30' : week.parzialmenteVacanza ? 'bg-badge-warn/15' : 'bg-surface hover:bg-overlay'
+                          week.isVacanza ? 'bg-badge-warn/30'
+                          : isCurrent ? 'bg-link/5 border-l-2 border-l-link'
+                          : week.parzialmenteVacanza ? 'bg-badge-warn/15'
+                          : isPast ? 'bg-canvas/50'
+                          : 'bg-surface hover:bg-overlay'
                         }`}
                       >
-                        <td className="px-3 py-2 text-xs text-fg-muted font-medium whitespace-nowrap">
+                        <td className={`px-3 py-2 text-xs font-medium whitespace-nowrap ${
+                          isCurrent ? 'text-link' : isPast ? 'text-fg-subtle' : 'text-fg-muted'
+                        }`}>
+                          {isCurrent && <span className="mr-1">&#9654;</span>}
                           {week.label}
                         </td>
                         <td className="px-2 py-2 text-center">
                           {week.isVacanza ? (
                             <span className="text-[10px] text-warn">—</span>
                           ) : (
-                            <span className={`text-xs font-semibold font-mono ${week.oreDisponibili > 0 ? 'text-fg' : 'text-fg-subtle'}`}>
+                            <span className={`text-xs font-semibold font-mono ${week.oreDisponibili > 0 ? (isPast ? 'text-fg-subtle' : 'text-fg') : 'text-fg-subtle'}`}>
                               {week.oreDisponibili}h
                             </span>
                           )}
@@ -741,24 +884,39 @@ export default function ProgrammazionePage() {
                               }`}
                             >
                               <option value="">— non assegnata —</option>
-                              {allUnita.map((u) => {
-                                const pColor = percorsoColorMap[u.percorsoId]
-                                return (
-                                  <option key={u.id} value={u.id}>
-                                    {u.percorsoTitolo} / {u.titolo} ({u.orePreviste}h)
-                                  </option>
-                                )
-                              })}
+                              {allUnita.map((u) => (
+                                <option key={u.id} value={u.id}>
+                                  {u.percorsoTitolo} / {u.titolo} ({u.orePreviste}h)
+                                </option>
+                              ))}
                             </select>
                           )}
 
-                          {/* Show partial vacation note */}
                           {week.parzialmenteVacanza && !week.isVacanza && (
                             <div className="text-[10px] text-warn mt-0.5">
                               {week.vacanzaNome} (parziale)
                             </div>
                           )}
                         </td>
+                        {showConsuntivo && (
+                          <td className="px-2 py-2 text-center">
+                            {consuntivo ? (
+                              <div className="flex items-center justify-center gap-1">
+                                {consuntivo.svolte > 0 && (
+                                  <span className="text-[10px] font-bold text-accent font-mono">{consuntivo.svolte}S</span>
+                                )}
+                                {consuntivo.parziali > 0 && (
+                                  <span className="text-[10px] font-bold text-warn font-mono">{consuntivo.parziali}½</span>
+                                )}
+                                {consuntivo.saltate > 0 && (
+                                  <span className="text-[10px] font-bold text-danger font-mono">{consuntivo.saltate}X</span>
+                                )}
+                              </div>
+                            ) : isPast && !week.isVacanza && week.oreDisponibili > 0 ? (
+                              <span className="text-[10px] text-fg-subtle">—</span>
+                            ) : null}
+                          </td>
+                        )}
                       </tr>
                     )
                   })}
@@ -768,6 +926,18 @@ export default function ProgrammazionePage() {
           )}
         </div>
       </div>
+
+      {/* ── SlidePanel for editing percorso ── */}
+      <SlidePanel
+        open={slidePanelPercorso !== null}
+        onClose={() => setSlidePanelPercorso(null)}
+        title={slidePanelPercorso ? `${slidePanelPercorso.titolo} — ${slidePanelPercorso.classe}` : ''}
+        width="md"
+      >
+        {slidePanelPercorso && (
+          <UnitaPanel percorso={slidePanelPercorso} />
+        )}
+      </SlidePanel>
     </div>
   )
 }

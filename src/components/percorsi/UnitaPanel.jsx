@@ -160,6 +160,32 @@ export default function UnitaPanel({ percorso }) {
     }
   }
 
+  // ── Bulk catch-up: mark completed up to a given unit ──
+  async function handleCompletaFinoA(targetIdx) {
+    const updates = []
+    for (let i = 0; i < unita.length; i++) {
+      const u = unita[i]
+      let nuovoStato
+      if (i < targetIdx) {
+        nuovoStato = STATO_UNITA.COMPLETATA
+      } else if (i === targetIdx) {
+        nuovoStato = STATO_UNITA.IN_CORSO
+      } else {
+        nuovoStato = STATO_UNITA.DA_FARE
+      }
+      if (u.stato !== nuovoStato) {
+        updates.push(updateUnita(percorso.id, u.id, { stato: nuovoStato }))
+      }
+    }
+    if (updates.length === 0) return
+    try {
+      await Promise.all(updates)
+      toast.success(`Stato aggiornato: ${targetIdx} completate, 1 in corso`)
+    } catch (err) {
+      toast.error('Errore durante l\'aggiornamento degli stati.')
+    }
+  }
+
   // ── Reorder ──
   async function handleMove(unitaId, direction) {
     const idx = unita.findIndex((u) => u.id === unitaId)
@@ -383,6 +409,15 @@ export default function UnitaPanel({ percorso }) {
                     {/* Azioni */}
                     <td className="px-2 py-1.5 text-right">
                       <div className="flex items-center justify-end gap-0.5">
+                        <button
+                          onClick={() => handleCompletaFinoA(idx)}
+                          className="text-accent/50 hover:text-accent p-0.5"
+                          title="Segna completate fino a qui (questa = in corso)"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
                         <button
                           onClick={() => handleMove(u.id, -1)}
                           disabled={idx === 0}

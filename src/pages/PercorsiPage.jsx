@@ -8,9 +8,12 @@ import {
   updatePercorso,
   deletePercorso,
   onAssegnazioni,
+  onUnita,
   getUnita,
   addUnita,
+  updateUnita,
 } from '../lib/firestore'
+import { STATO_UNITA } from '../lib/costanti'
 import UnitaPanel from '../components/percorsi/UnitaPanel'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ConfirmDialog from '../components/common/ConfirmDialog'
@@ -41,6 +44,8 @@ export default function PercorsiPage() {
 
   // View mode
   const [compact, setCompact] = useState(false)
+  const [catchupMode, setCatchupMode] = useState(false)
+  const [catchupUnita, setCatchupUnita] = useState({}) // percorsoId -> unita[]
 
   // Duplicate feature state
   const [duplicatingId, setDuplicatingId] = useState(null)
@@ -202,6 +207,49 @@ export default function PercorsiPage() {
     }
   }
 
+  // ── Catchup mode: load unita for all percorsi ──
+  useEffect(() => {
+    if (!catchupMode || percorsi.length === 0) return
+    const unsubs = []
+    for (const p of percorsi) {
+      unsubs.push(onUnita(p.id, (units) => {
+        setCatchupUnita((prev) => ({ ...prev, [p.id]: units }))
+      }))
+    }
+    return () => unsubs.forEach((u) => u())
+  }, [catchupMode, percorsi.map((p) => p.id).join(',')])
+
+  async function handleCatchupClick(percorso, clickedIdx) {
+    const units = (catchupUnita[percorso.id] || [])
+      .slice()
+      .sort((a, b) => (a.ordine || 0) - (b.ordine || 0))
+    if (units.length === 0) return
+
+    const updates = []
+    for (let i = 0; i < units.length; i++) {
+      const u = units[i]
+      let nuovoStato
+      if (i < clickedIdx) {
+        nuovoStato = STATO_UNITA.COMPLETATA
+      } else if (i === clickedIdx) {
+        nuovoStato = STATO_UNITA.IN_CORSO
+      } else {
+        nuovoStato = STATO_UNITA.DA_FARE
+      }
+      if (u.stato !== nuovoStato) {
+        updates.push(updateUnita(percorso.id, u.id, { stato: nuovoStato }))
+      }
+    }
+    if (updates.length > 0) {
+      try {
+        await Promise.all(updates)
+        toast.success(`${percorso.titolo}: ${clickedIdx} completate, 1 in corso`)
+      } catch {
+        toast.error('Errore durante l\'aggiornamento.')
+      }
+    }
+  }
+
   if (configLoading || loading) return <LoadingSpinner />
 
   if (!annoAttivo) {
@@ -244,23 +292,37 @@ export default function PercorsiPage() {
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold text-fg">Percorsi Didattici</h1>
-        <div className="flex bg-overlay rounded-sm p-0.5 border border-edge-muted">
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setCompact(false)}
-            className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
-              !compact ? 'bg-surface text-fg' : 'text-fg-muted hover:text-fg'
+            onClick={() => setCatchupMode(!catchupMode)}
+            className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors border ${
+              catchupMode
+                ? 'bg-accent/20 text-accent border-accent/30'
+                : 'bg-overlay text-fg-muted border-edge-muted hover:text-fg'
             }`}
           >
-            Normale
+            Aggiornamento rapido
           </button>
-          <button
-            onClick={() => setCompact(true)}
-            className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
-              compact ? 'bg-surface text-fg' : 'text-fg-muted hover:text-fg'
-            }`}
-          >
-            Compatta
-          </button>
+          {!catchupMode && (
+            <div className="flex bg-overlay rounded-sm p-0.5 border border-edge-muted">
+              <button
+                onClick={() => setCompact(false)}
+                className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
+                  !compact ? 'bg-surface text-fg' : 'text-fg-muted hover:text-fg'
+                }`}
+              >
+                Normale
+              </button>
+              <button
+                onClick={() => setCompact(true)}
+                className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
+                  compact ? 'bg-surface text-fg' : 'text-fg-muted hover:text-fg'
+                }`}
+              >
+                Compatta
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -300,8 +362,69 @@ export default function PercorsiPage() {
         </form>
       )}
 
+      {/* ── Catchup mode: compact bubble view ── */}
+      {catchupMode && (
+        <div className="space-y-4 mb-6">
+          <p className="text-xs text-fg-muted">
+            Clicca su un pallino per indicare dove sei arrivato: tutto a sinistra diventa completato, quello cliccato diventa "in corso", il resto "da fare".
+          </p>
+          {Object.entries(percorsiPerAssegnazione).map(([key, groupPercorsi]) => {
+            if (groupPercorsi.length === 0) return null
+            const [groupClasse, groupMateria] = key.split('||')
+            return (
+              <div key={key}>
+                <h3 className="text-sm font-semibold text-fg mb-2">
+                  <span className="bg-overlay text-fg rounded-sm font-bold px-1.5 py-0 text-xs">{groupClasse}</span>
+                  {groupMateria && <span className="text-xs font-normal text-fg-muted ml-1.5">{groupMateria}</span>}
+                </h3>
+                {groupPercorsi.map((p) => {
+                  const units = (catchupUnita[p.id] || [])
+                    .slice()
+                    .sort((a, b) => (a.ordine || 0) - (b.ordine || 0))
+                  const completate = units.filter((u) => u.stato === STATO_UNITA.COMPLETATA).length
+                  const inCorso = units.findIndex((u) => u.stato === STATO_UNITA.IN_CORSO)
+                  return (
+                    <div key={p.id} className="mb-3 bg-surface border border-edge rounded-sm px-3 py-2">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-medium text-fg">{p.titolo}</span>
+                        <span className="text-xs text-fg-muted font-mono">
+                          {completate}/{units.length}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {units.map((u, i) => (
+                          <button
+                            key={u.id}
+                            onClick={() => handleCatchupClick(p, i)}
+                            title={`${u.titolo} (${u.orePreviste || 0}h) — click = in corso da qui`}
+                            className={`w-7 h-7 rounded-full text-[10px] font-bold flex items-center justify-center transition-all border ${
+                              u.stato === STATO_UNITA.COMPLETATA
+                                ? 'bg-accent/30 border-accent/50 text-accent'
+                                : u.stato === STATO_UNITA.IN_CORSO
+                                  ? 'bg-warn/30 border-warn/50 text-warn ring-2 ring-warn/30'
+                                  : 'bg-overlay border-edge text-fg-subtle hover:border-fg-muted'
+                            }`}
+                          >
+                            {i + 1}
+                          </button>
+                        ))}
+                      </div>
+                      {units.length > 0 && inCorso >= 0 && (
+                        <p className="text-[11px] text-warn mt-1.5 font-medium">
+                          In corso: {units[inCorso].titolo}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {/* Percorsi grouped by classe+materia */}
-      {Object.entries(percorsiPerAssegnazione).map(([key, groupPercorsi]) => {
+      {!catchupMode && Object.entries(percorsiPerAssegnazione).map(([key, groupPercorsi]) => {
         if (groupPercorsi.length === 0) return null
         const [groupClasse, groupMateria] = key.split('||')
         return (
@@ -520,7 +643,7 @@ export default function PercorsiPage() {
         )
       })}
 
-      {percorsi.length === 0 && assegnazioniOrdinati.length > 0 && (
+      {!catchupMode && percorsi.length === 0 && assegnazioniOrdinati.length > 0 && (
         <div className="text-center py-12 bg-surface rounded-sm border border-edge">
           <p className="text-fg-muted mb-3">
             Nessun percorso ancora. Usa la barra qui sopra per crearne uno!

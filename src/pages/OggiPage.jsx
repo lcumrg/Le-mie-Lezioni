@@ -154,13 +154,20 @@ export default function OggiPage() {
     try {
       await updateLezione(lezioneId, { stato: nuovoStato })
       if (prevStato && prevStato !== nuovoStato) {
-        toast.action('Stato aggiornato', {
-          label: 'Annulla',
-          onClick: () => updateLezione(lezioneId, { stato: prevStato }),
-        })
+        const lez = lezioni.find((l) => l.id === lezioneId)
+        if (nuovoStato === STATO_LEZIONE.SALTATA && lez) {
+          toast.action(`Lezione ${lez.classe} saltata. Controlla la programmazione.`, {
+            label: 'Annulla',
+            onClick: () => updateLezione(lezioneId, { stato: prevStato }),
+          })
+        } else {
+          toast.action('Stato aggiornato', {
+            label: 'Annulla',
+            onClick: () => updateLezione(lezioneId, { stato: prevStato }),
+          })
+        }
       }
     } catch (err) {
-      console.error('Errore aggiornamento stato lezione:', err)
       toast.error("Errore nell'aggiornamento dello stato della lezione")
     } finally {
       setUpdatingLezioni((prev) => { const s = new Set(prev); s.delete(lezioneId); return s })
@@ -222,7 +229,10 @@ export default function OggiPage() {
     if (pianificate.length === 0) return
     try {
       await Promise.all(pianificate.map((l) => updateLezione(l.id, { stato: STATO_LEZIONE.SVOLTA })))
-      toast.success(`${pianificate.length} lezioni segnate come svolte`)
+      toast.action(`${pianificate.length} lezioni segnate come svolte`, {
+        label: 'Annulla',
+        onClick: () => Promise.all(pianificate.map((l) => updateLezione(l.id, { stato: STATO_LEZIONE.PIANIFICATA }))),
+      })
     } catch {
       toast.error("Errore durante l'aggiornamento.")
     }

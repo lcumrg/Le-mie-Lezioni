@@ -86,6 +86,22 @@ Da riprendere a fine anno scolastico 2025-2026. Utile per onboarding nuovi utent
 
 ---
 
+## Ripianificazione rapida (fuori roadmap)
+
+- ✅ Panoramica multi-classe in ProgrammazionePage (toggle Dettaglio/Panoramica)
+- ✅ Tabella con ore rimaste, pianificate, svolte, margine per ogni classe
+- ✅ Stato "Saltata" per unita didattiche (taglia senza cancellare)
+- ✅ Unita saltate escluse automaticamente da distribuzione e bilancio
+- ✅ Indicatore "classi in ritardo" nella panoramica
+
+## Pulizia visiva griglia Settimana (fuori roadmap)
+
+- ✅ Rimossi bottoni P/S/X dalle celle (usare pannello editing sotto)
+- ✅ Celle compatte: classe + badge stato + titolo + percorso
+- ✅ Colori piu tenui, celle piu basse
+
+---
+
 ## Lavoro in corso
 
 _Nessun lavoro in corso al momento._

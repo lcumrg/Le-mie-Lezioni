@@ -128,10 +128,11 @@ export default function AssenzePage() {
   // Compute school year months
   const months = useMemo(() => {
     if (!annoAttivo) return []
-    const match = annoAttivo.match(/(\d{4})\D+(\d{4})/)
+    const match = annoAttivo.match(/(\d{4})\D+(\d{2,4})/)
     if (!match) return []
     const startYear = Number(match[1])
-    const endYear = Number(match[2])
+    let endYear = Number(match[2])
+    if (endYear < 100) endYear += Math.floor(startYear / 100) * 100
     let endMonth = 5 // June default
     if (annoConfig?.dataFineScuola) {
       const parts = annoConfig.dataFineScuola.split('-')

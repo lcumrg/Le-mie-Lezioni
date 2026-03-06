@@ -44,6 +44,7 @@ export default function ImpostazioniPage() {
   const [nuovaMateria, setNuovaMateria] = useState('')
   const [oreLezione, setOreLezione] = useState([])
   const [giornoLibero, setGiornoLibero] = useState(null)
+  const [dataInizioScuola, setDataInizioScuola] = useState('')
   const [dataFineScuola, setDataFineScuola] = useState('')
   const [savingOre, setSavingOre] = useState(false)
   const [orari, setOrari] = useState([])
@@ -57,7 +58,7 @@ export default function ImpostazioniPage() {
 
   useEffect(() => { if (!annoAttivo) return; const u1 = onAssegnazioni(annoAttivo, setAssegnazioni); const u2 = onOrari(annoAttivo, setOrari); return () => { u1(); u2() } }, [annoAttivo])
   useEffect(() => { if (annoAttivo) setAnnoInput(annoAttivo) }, [annoAttivo])
-  useEffect(() => { if (annoConfig?.oreLezione) setOreLezione(annoConfig.oreLezione); setGiornoLibero(annoConfig?.giornoLibero ?? null); setDataFineScuola(annoConfig?.dataFineScuola || '') }, [annoConfig])
+  useEffect(() => { if (annoConfig?.oreLezione) setOreLezione(annoConfig.oreLezione); setGiornoLibero(annoConfig?.giornoLibero ?? null); setDataInizioScuola(annoConfig?.dataInizioScuola || ''); setDataFineScuola(annoConfig?.dataFineScuola || '') }, [annoConfig])
   useEffect(() => { if (giornoLibero !== null && orarioForm.giorno === giornoLibero) { const fv = [0,1,2,3,4,5].find((g) => g !== giornoLibero); setOrarioForm((f) => ({ ...f, giorno: fv ?? 0 })) } }, [giornoLibero])
 
   async function handleSaveAnno(e) { e.preventDefault(); const value = annoInput.trim(); if (!value) return; if (!ANNO_PATTERN.test(value)) { toast.error('Formato anno non valido. Usa il formato: 2025-2026'); return }; setSaving(true); try { await setAnnoScolasticoConfig({ annoAttivo: value, anniScolastici: { ...(config?.anniScolastici || {}), [value]: config?.anniScolastici?.[value] || {} } }); toast.success('Anno scolastico salvato') } catch (err) { toast.error('Errore nel salvataggio dell\'anno scolastico') } finally { setSaving(false) } }
@@ -65,7 +66,7 @@ export default function ImpostazioniPage() {
   function handleDeleteAssegnazione(id) { const a = assegnazioni.find((x) => x.id === id); setDeleteConfirm({ open: true, id, type: 'assegnazione', label: a ? `${a.classe} — ${a.materia}` : 'questa assegnazione' }) }
   function handleSetNumeroOre(count) { if (oreLezione.length === 0) { setOreLezione(generateDefaultOre(count)) } else if (count > oreLezione.length) { const last = oreLezione[oreLezione.length - 1]; const additional = generateDefaultOre(count - oreLezione.length, last.fine); const renumbered = additional.map((o, i) => ({ ...o, numero: oreLezione.length + i + 1 })); setOreLezione([...oreLezione, ...renumbered]) } else { setOreLezione(oreLezione.slice(0, count)) } }
   function handleOraChange(index, field, value) { setOreLezione((prev) => prev.map((o, i) => (i === index ? { ...o, [field]: value } : o))) }
-  async function handleSaveOreConfig() { if (!annoAttivo) return; setSavingOre(true); try { await setAnnoScolasticoConfig({ anniScolastici: { ...(config?.anniScolastici || {}), [annoAttivo]: { ...(config?.anniScolastici?.[annoAttivo] || {}), oreLezione, giornoLibero, dataFineScuola: dataFineScuola || null } } }); toast.success('Configurazione ore salvata') } catch (err) { toast.error('Errore nel salvataggio della configurazione ore') } finally { setSavingOre(false) } }
+  async function handleSaveOreConfig() { if (!annoAttivo) return; setSavingOre(true); try { await setAnnoScolasticoConfig({ anniScolastici: { ...(config?.anniScolastici || {}), [annoAttivo]: { ...(config?.anniScolastici?.[annoAttivo] || {}), oreLezione, giornoLibero, dataInizioScuola: dataInizioScuola || null, dataFineScuola: dataFineScuola || null } } }); toast.success('Configurazione ore salvata') } catch (err) { toast.error('Errore nel salvataggio della configurazione ore') } finally { setSavingOre(false) } }
   async function handleAddOrario(e) { e.preventDefault(); if (!orarioForm.classe || !orarioForm.materia || !annoAttivo) return; const oraConfig = oreLezione.find((o) => o.numero === orarioForm.numeroOra); if (!oraConfig) return; try { await addOrario({ annoScolastico: annoAttivo, giorno: orarioForm.giorno, numeroOra: orarioForm.numeroOra, oraInizio: oraConfig.inizio, oraFine: oraConfig.fine, classe: orarioForm.classe, materia: orarioForm.materia, ore: 1 }); setOrarioForm((f) => ({ ...f, classe: '', materia: '' })); toast.success('Orario aggiunto') } catch (err) { toast.error('Errore nell\'aggiunta dell\'orario') } }
   function handleDeleteOrario(id) { const o = orari.find((x) => x.id === id); setDeleteConfirm({ open: true, id, type: 'orario', label: o ? `${GIORNI_SHORT[o.giorno]} ${o.numeroOra ? ORE_ROMAN[o.numeroOra - 1] + 'a ora' : o.oraInizio} — ${o.classe}` : 'questo slot orario' }) }
   async function handleConfirmDelete() { const { id, type } = deleteConfirm; setDeleteConfirm({ open: false, id: null, type: '', label: '' }); try { if (type === 'assegnazione') await deleteAssegnazione(id); else if (type === 'orario') await deleteOrario(id) } catch (err) { toast.error('Errore durante l\'eliminazione') } }
@@ -163,6 +164,10 @@ export default function ImpostazioniPage() {
               <option value="">Nessuno</option>
               {GIORNI_LABEL.map((g, i) => <option key={i} value={i}>{g}</option>)}
             </select>
+          </div>
+          <div className="mb-5">
+            <label className="block text-sm font-medium text-fg-muted mb-2">Primo giorno di scuola</label>
+            <input type="date" value={dataInizioScuola} onChange={(e) => setDataInizioScuola(e.target.value)} className="px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none" />
           </div>
           <div className="mb-5">
             <label className="block text-sm font-medium text-fg-muted mb-2">Ultimo giorno di scuola</label>

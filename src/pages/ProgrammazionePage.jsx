@@ -927,7 +927,6 @@ export default function ProgrammazionePage() {
                         className={`border-b border-edge-muted last:border-b-0 ${
                           week.isVacanza ? 'bg-badge-warn/30'
                           : isCurrent ? 'bg-link/5 border-l-2 border-l-link'
-                          : week.parzialmenteVacanza ? 'bg-badge-warn/15'
                           : isPast ? 'bg-canvas/50'
                           : 'bg-surface hover:bg-overlay'
                         }`}
@@ -973,11 +972,6 @@ export default function ProgrammazionePage() {
                             </select>
                           )}
 
-                          {week.parzialmenteVacanza && !week.isVacanza && (
-                            <div className="text-[10px] text-warn mt-0.5">
-                              {week.vacanzaNome} (parziale)
-                            </div>
-                          )}
                         </td>
                         {showConsuntivo && (
                           <td className="px-2 py-2 text-center">

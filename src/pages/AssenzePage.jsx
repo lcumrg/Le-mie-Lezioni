@@ -84,8 +84,6 @@ export default function AssenzePage() {
   const toast = useToast()
   const [vacanze, setVacanze] = useState([])
   const [brush, setBrush] = useState(TIPO_VACANZA.VACANZA)
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ nome: '', dataInizio: '', dataFine: '', tipo: TIPO_VACANZA.VACANZA })
   const [clearConfirm, setClearConfirm] = useState(false)
   const [clearing, setClearing] = useState(false)
 
@@ -182,37 +180,6 @@ export default function AssenzePage() {
     }
   }
 
-  async function handleAddPeriodo(e) {
-    e.preventDefault()
-    if (!form.nome.trim() || !form.dataInizio || !annoAttivo) return
-    const df = form.dataFine || form.dataInizio
-    if (df < form.dataInizio) {
-      toast.error('La data di fine non puo essere precedente alla data di inizio')
-      return
-    }
-    try {
-      await addVacanza({
-        annoScolastico: annoAttivo,
-        nome: form.nome.trim(),
-        dataInizio: form.dataInizio,
-        dataFine: df,
-        tipo: form.tipo,
-      })
-      setForm({ nome: '', dataInizio: '', dataFine: '', tipo: TIPO_VACANZA.VACANZA })
-      toast.success('Periodo aggiunto')
-    } catch {
-      toast.error("Errore nell'aggiunta del periodo")
-    }
-  }
-
-  async function handleDeletePeriodo(id) {
-    try {
-      await deleteVacanza(id)
-    } catch {
-      toast.error("Errore nell'eliminazione")
-    }
-  }
-
   async function handleClearAll() {
     setClearConfirm(false)
     setClearing(true)
@@ -236,11 +203,6 @@ export default function AssenzePage() {
       </div>
     )
   }
-
-  // Multi-day periods (for the list below)
-  const periodi = vacanze
-    .filter((v) => v.dataInizio !== v.dataFine)
-    .sort((a, b) => a.dataInizio.localeCompare(b.dataInizio))
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -320,70 +282,6 @@ export default function AssenzePage() {
         </p>
       </div>
 
-      {/* Add period form (collapsible) */}
-      <div className="bg-surface rounded-sm border border-edge">
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-fg-muted hover:text-fg transition-colors"
-        >
-          <span>Aggiungi periodo (piu giorni)</span>
-          <svg className={`w-4 h-4 transition-transform ${showForm ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-        {showForm && (
-          <form onSubmit={handleAddPeriodo} className="px-4 pb-4 flex flex-wrap items-end gap-3">
-            <div className="flex-1 min-w-[140px]">
-              <label className="block text-sm font-medium text-fg-muted mb-1">Nome</label>
-              <input
-                type="text"
-                value={form.nome}
-                onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))}
-                placeholder="es. Vacanze di Natale"
-                className="w-full px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1">Dal</label>
-              <input
-                type="date"
-                value={form.dataInizio}
-                onChange={(e) => setForm((f) => ({ ...f, dataInizio: e.target.value }))}
-                className="px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1">Al</label>
-              <input
-                type="date"
-                value={form.dataFine}
-                onChange={(e) => setForm((f) => ({ ...f, dataFine: e.target.value }))}
-                className="px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1">Tipo</label>
-              <select
-                value={form.tipo}
-                onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value }))}
-                className="px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none"
-              >
-                {Object.values(TIPO_VACANZA).map((tipo) => (
-                  <option key={tipo} value={tipo}>{TIPO_VACANZA_LABEL[tipo]}</option>
-                ))}
-              </select>
-            </div>
-            <button
-              type="submit"
-              disabled={!form.nome.trim() || !form.dataInizio}
-              className="px-4 py-2 bg-link text-white text-sm font-medium rounded-sm hover:bg-link/80 disabled:opacity-50"
-            >
-              Aggiungi
-            </button>
-          </form>
-        )}
-      </div>
-
       {/* Calendar grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {months.map(({ year, month }) => {
@@ -432,42 +330,6 @@ export default function AssenzePage() {
           )
         })}
       </div>
-
-      {/* Multi-day periods list */}
-      {periodi.length > 0 && (
-        <div className="bg-surface rounded-sm border border-edge p-4">
-          <h3 className="text-sm font-semibold text-fg mb-3">Periodi</h3>
-          <div className="space-y-2">
-            {periodi.map((v) => {
-              const c = getColorFor(v.tipo)
-              return (
-                <div key={v.id} className="flex items-center justify-between px-3 py-2 bg-overlay rounded-sm">
-                  <div className="flex items-center gap-2">
-                    <span className={`inline-block w-2.5 h-2.5 rounded-full ${c.dot}`} />
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${c.badge}`}>
-                      {TIPO_VACANZA_LABEL[v.tipo] || v.tipo}
-                    </span>
-                    <span className="text-sm font-medium text-fg">{v.nome}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-fg-muted font-mono">
-                      {v.dataInizio} &rarr; {v.dataFine}
-                    </span>
-                    <button
-                      onClick={() => handleDeletePeriodo(v.id)}
-                      className="text-danger/60 hover:text-danger"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
 
       <ConfirmDialog
         open={clearConfirm}

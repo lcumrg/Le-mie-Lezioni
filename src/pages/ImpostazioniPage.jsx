@@ -268,7 +268,7 @@ export default function ImpostazioniPage() {
           <p className="text-sm text-fg-muted mb-4">Importa classi, orario, percorsi, ricorrenze e vacanze da un file Excel. I dati vengono <strong>aggiunti</strong> a quelli esistenti (non sostituiti).</p>
           <div className="flex flex-wrap items-center gap-3 mb-4">
             <a href="/template-importazione.xlsx" download className="px-4 py-2 bg-accent text-white text-sm font-medium rounded-sm hover:bg-accent/80">Scarica template Excel</a>
-            <a href="/test-anno-prova.xlsx" download className="px-4 py-2 bg-warn text-white text-sm font-medium rounded-sm hover:bg-warn/80">Scarica dati di prova</a>
+            <a href="/test-anno-prova.xlsx" download className="px-4 py-2 bg-warn text-fg text-sm font-medium rounded-sm hover:bg-warn/80">Scarica dati di prova</a>
             <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-link text-white text-sm font-medium rounded-sm hover:bg-link/80">Seleziona file da importare</button>
             <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFileSelect} className="hidden" />
           </div>

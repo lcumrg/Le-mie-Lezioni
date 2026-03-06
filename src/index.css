@@ -2,35 +2,36 @@
 
 @theme {
   /* Surfaces */
-  --color-canvas: #0d1117;
-  --color-surface: #161b22;
-  --color-overlay: #1c2128;
-  --color-inset: #010409;
+  --color-canvas: #F5F0EB;
+  --color-surface: #FFFCF8;
+  --color-overlay: #EDE8E2;
+  --color-inset: #E8E3DC;
 
   /* Borders */
-  --color-edge: #30363d;
-  --color-edge-muted: #21262d;
+  --color-edge: #CFC9C2;
+  --color-edge-muted: #DDD8D1;
 
   /* Text */
-  --color-fg: #e6edf3;
-  --color-fg-muted: #7d8590;
-  --color-fg-subtle: #484f58;
+  --color-fg: #2C2C2C;
+  --color-fg-muted: #6B6560;
+  --color-fg-subtle: #9E9890;
 
-  /* Functional accents */
-  --color-accent: #3fb950;
-  --color-link: #58a6ff;
-  --color-danger: #f85149;
-  --color-warn: #d29922;
-  --color-special: #bc8cff;
-  --color-highlight: #39d2c0;
+  /* Colore primario blu — navigazione, azioni principali, focus */
+  --color-accent: #2D6BE4;
+  --color-link: #2D6BE4;
+  /* Accento ambra — solo CTA e priorità, usare con parsimonia */
+  --color-warn: #F4A435;
+  --color-danger: #C93020;
+  --color-special: #7C5CBF;
+  --color-highlight: #0D9488;
 
-  /* Status badge backgrounds */
-  --color-badge-p: #121d2f;
-  --color-badge-s: #0d2818;
-  --color-badge-h: #2a1e04;
-  --color-badge-x: #2d1215;
-  --color-badge-warn: #2a1e04;
-  --color-badge-special: #1e1533;
+  /* Status badge backgrounds (toni chiari) */
+  --color-badge-p: #E8F0FD;
+  --color-badge-s: #E8F7ED;
+  --color-badge-h: #FEF3E0;
+  --color-badge-x: #FDE8E8;
+  --color-badge-warn: #FEF3E0;
+  --color-badge-special: #F0EBFA;
 
   /* Fonts */
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
@@ -42,6 +43,8 @@ body {
   min-height: 100vh;
   background-color: var(--color-canvas);
   color: var(--color-fg);
+  font-size: 16px;
+  line-height: 1.65;
 }
 
 /* Animations */
@@ -83,13 +86,13 @@ body {
   margin-left: 2px;
 }
 
-/* Scrollbar styling for dark theme */
+/* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--color-canvas);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--color-edge);

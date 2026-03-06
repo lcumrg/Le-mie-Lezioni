@@ -179,6 +179,10 @@ export async function addVacanza(data) {
   return addDoc(vacanzeRef, data)
 }
 
+export async function updateVacanza(id, data) {
+  return updateDoc(doc(db, 'vacanze', id), data)
+}
+
 export async function deleteVacanza(id) {
   return deleteDoc(doc(db, 'vacanze', id))
 }

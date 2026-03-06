@@ -9,9 +9,6 @@ import {
   onOrari,
   addOrario,
   deleteOrario,
-  onVacanze,
-  addVacanza,
-  deleteVacanza,
   resetAnnoScolastico,
 } from '../lib/firestore'
 import { parseExcel, importToFirestore } from '../lib/importExcel'
@@ -19,8 +16,6 @@ import {
   GIORNI_LABEL,
   GIORNI_SHORT,
   ORE_ROMAN,
-  TIPO_VACANZA,
-  TIPO_VACANZA_LABEL,
 } from '../lib/costanti'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ConfirmDialog from '../components/common/ConfirmDialog'
@@ -51,8 +46,6 @@ export default function ImpostazioniPage() {
   const [giornoLibero, setGiornoLibero] = useState(null)
   const [dataFineScuola, setDataFineScuola] = useState('')
   const [savingOre, setSavingOre] = useState(false)
-  const [vacanze, setVacanze] = useState([])
-  const [vacanzaForm, setVacanzaForm] = useState({ nome: '', dataInizio: '', dataFine: '', tipo: TIPO_VACANZA.VACANZA })
   const [orari, setOrari] = useState([])
   const [orarioForm, setOrarioForm] = useState({ giorno: 0, numeroOra: 1, classe: '', materia: '' })
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, id: null, type: '', label: '' })
@@ -62,7 +55,7 @@ export default function ImpostazioniPage() {
   const [resetConfirm, setResetConfirm] = useState(false)
   const [resetting, setResetting] = useState(false)
 
-  useEffect(() => { if (!annoAttivo) return; const u1 = onAssegnazioni(annoAttivo, setAssegnazioni); const u2 = onOrari(annoAttivo, setOrari); const u3 = onVacanze(annoAttivo, setVacanze); return () => { u1(); u2(); u3() } }, [annoAttivo])
+  useEffect(() => { if (!annoAttivo) return; const u1 = onAssegnazioni(annoAttivo, setAssegnazioni); const u2 = onOrari(annoAttivo, setOrari); return () => { u1(); u2() } }, [annoAttivo])
   useEffect(() => { if (annoAttivo) setAnnoInput(annoAttivo) }, [annoAttivo])
   useEffect(() => { if (annoConfig?.oreLezione) setOreLezione(annoConfig.oreLezione); setGiornoLibero(annoConfig?.giornoLibero ?? null); setDataFineScuola(annoConfig?.dataFineScuola || '') }, [annoConfig])
   useEffect(() => { if (giornoLibero !== null && orarioForm.giorno === giornoLibero) { const fv = [0,1,2,3,4,5].find((g) => g !== giornoLibero); setOrarioForm((f) => ({ ...f, giorno: fv ?? 0 })) } }, [giornoLibero])
@@ -73,11 +66,9 @@ export default function ImpostazioniPage() {
   function handleSetNumeroOre(count) { if (oreLezione.length === 0) { setOreLezione(generateDefaultOre(count)) } else if (count > oreLezione.length) { const last = oreLezione[oreLezione.length - 1]; const additional = generateDefaultOre(count - oreLezione.length, last.fine); const renumbered = additional.map((o, i) => ({ ...o, numero: oreLezione.length + i + 1 })); setOreLezione([...oreLezione, ...renumbered]) } else { setOreLezione(oreLezione.slice(0, count)) } }
   function handleOraChange(index, field, value) { setOreLezione((prev) => prev.map((o, i) => (i === index ? { ...o, [field]: value } : o))) }
   async function handleSaveOreConfig() { if (!annoAttivo) return; setSavingOre(true); try { await setAnnoScolasticoConfig({ anniScolastici: { ...(config?.anniScolastici || {}), [annoAttivo]: { ...(config?.anniScolastici?.[annoAttivo] || {}), oreLezione, giornoLibero, dataFineScuola: dataFineScuola || null } } }); toast.success('Configurazione ore salvata') } catch (err) { toast.error('Errore nel salvataggio della configurazione ore') } finally { setSavingOre(false) } }
-  async function handleAddVacanza(e) { e.preventDefault(); if (!vacanzaForm.nome.trim() || !vacanzaForm.dataInizio || !annoAttivo) return; const df = vacanzaForm.dataFine || vacanzaForm.dataInizio; if (df < vacanzaForm.dataInizio) { toast.error('La data di fine non può essere precedente alla data di inizio'); return }; try { await addVacanza({ annoScolastico: annoAttivo, nome: vacanzaForm.nome.trim(), dataInizio: vacanzaForm.dataInizio, dataFine: df, tipo: vacanzaForm.tipo }); setVacanzaForm({ nome: '', dataInizio: '', dataFine: '', tipo: TIPO_VACANZA.VACANZA }); toast.success('Vacanza aggiunta') } catch (err) { toast.error('Errore nell\'aggiunta della vacanza') } }
-  function handleDeleteVacanza(id) { const v = vacanze.find((x) => x.id === id); setDeleteConfirm({ open: true, id, type: 'vacanza', label: v ? v.nome : 'questa vacanza' }) }
   async function handleAddOrario(e) { e.preventDefault(); if (!orarioForm.classe || !orarioForm.materia || !annoAttivo) return; const oraConfig = oreLezione.find((o) => o.numero === orarioForm.numeroOra); if (!oraConfig) return; try { await addOrario({ annoScolastico: annoAttivo, giorno: orarioForm.giorno, numeroOra: orarioForm.numeroOra, oraInizio: oraConfig.inizio, oraFine: oraConfig.fine, classe: orarioForm.classe, materia: orarioForm.materia, ore: 1 }); setOrarioForm((f) => ({ ...f, classe: '', materia: '' })); toast.success('Orario aggiunto') } catch (err) { toast.error('Errore nell\'aggiunta dell\'orario') } }
   function handleDeleteOrario(id) { const o = orari.find((x) => x.id === id); setDeleteConfirm({ open: true, id, type: 'orario', label: o ? `${GIORNI_SHORT[o.giorno]} ${o.numeroOra ? ORE_ROMAN[o.numeroOra - 1] + 'a ora' : o.oraInizio} — ${o.classe}` : 'questo slot orario' }) }
-  async function handleConfirmDelete() { const { id, type } = deleteConfirm; setDeleteConfirm({ open: false, id: null, type: '', label: '' }); try { if (type === 'assegnazione') await deleteAssegnazione(id); else if (type === 'vacanza') await deleteVacanza(id); else if (type === 'orario') await deleteOrario(id) } catch (err) { toast.error('Errore durante l\'eliminazione') } }
+  async function handleConfirmDelete() { const { id, type } = deleteConfirm; setDeleteConfirm({ open: false, id: null, type: '', label: '' }); try { if (type === 'assegnazione') await deleteAssegnazione(id); else if (type === 'orario') await deleteOrario(id) } catch (err) { toast.error('Errore durante l\'eliminazione') } }
   function handleCancelDelete() { setDeleteConfirm({ open: false, id: null, type: '', label: '' }) }
   async function handleResetAnno() { if (!annoAttivo) return; setResetting(true); setResetConfirm(false); try { const summary = await resetAnnoScolastico(annoAttivo); const parts = []; if (summary.assegnazioni) parts.push(`${summary.assegnazioni} assegnazioni`); if (summary.orari) parts.push(`${summary.orari} orari`); if (summary.percorsi) parts.push(`${summary.percorsi} percorsi`); if (summary.unita) parts.push(`${summary.unita} unita`); if (summary.lezioni) parts.push(`${summary.lezioni} lezioni`); if (summary.vacanze) parts.push(`${summary.vacanze} vacanze`); toast.success(parts.length > 0 ? `Dati eliminati: ${parts.join(', ')}` : 'Nessun dato da eliminare') } catch (err) { toast.error('Errore durante il reset: ' + err.message) } finally { setResetting(false) } }
   async function handleFileSelect(e) { const file = e.target.files?.[0]; if (!file) return; try { const preview = await parseExcel(file); setImportPreview({ ...preview, file }) } catch (err) { toast.error('Errore nella lettura del file Excel: ' + err.message) }; if (fileInputRef.current) fileInputRef.current.value = '' }
@@ -182,51 +173,6 @@ export default function ImpostazioniPage() {
         </section>
       )}
 
-      {annoAttivo && (
-        <section className="bg-surface rounded-sm border border-edge p-6">
-          <h2 className="text-lg font-semibold text-fg mb-4">Vacanze e Assenze</h2>
-          <p className="text-sm text-fg-muted mb-4">Inserisci periodi di vacanza, chiusure e giorni di assenza personale. Servono per calcolare le ore effettive disponibili.</p>
-          <form onSubmit={handleAddVacanza} className="flex flex-wrap items-end gap-3 mb-4">
-            <div className="flex-1 min-w-[140px]">
-              <label className="block text-sm font-medium text-fg-muted mb-1">Nome</label>
-              <input type="text" value={vacanzaForm.nome} onChange={(e) => setVacanzaForm((f) => ({ ...f, nome: e.target.value }))} placeholder="es. Vacanze di Natale" className="w-full px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1">Dal</label>
-              <input type="date" value={vacanzaForm.dataInizio} onChange={(e) => setVacanzaForm((f) => ({ ...f, dataInizio: e.target.value }))} className="px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1">Al</label>
-              <input type="date" value={vacanzaForm.dataFine} onChange={(e) => setVacanzaForm((f) => ({ ...f, dataFine: e.target.value }))} className="px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1">Tipo</label>
-              <select value={vacanzaForm.tipo} onChange={(e) => setVacanzaForm((f) => ({ ...f, tipo: e.target.value }))} className="px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none">
-                {Object.values(TIPO_VACANZA).map((tipo) => <option key={tipo} value={tipo}>{TIPO_VACANZA_LABEL[tipo]}</option>)}
-              </select>
-            </div>
-            <button type="submit" disabled={!vacanzaForm.nome.trim() || !vacanzaForm.dataInizio} className="px-4 py-2 bg-link text-white text-sm font-medium rounded-sm hover:bg-link/80 disabled:opacity-50">Aggiungi</button>
-          </form>
-          {vacanze.length > 0 ? (
-            <div className="space-y-2">
-              {[...vacanze].sort((a, b) => a.dataInizio.localeCompare(b.dataInizio)).map((v) => (
-                <div key={v.id} className="flex items-center justify-between px-3 py-2 bg-overlay rounded-sm">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${v.tipo === TIPO_VACANZA.VACANZA ? 'bg-badge-warn text-warn' : v.tipo === TIPO_VACANZA.CHIUSURA ? 'bg-badge-special text-special' : 'bg-badge-warn text-warn'}`}>{TIPO_VACANZA_LABEL[v.tipo] || v.tipo}</span>
-                    <span className="text-sm font-medium text-fg">{v.nome}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-fg-muted font-mono">{v.dataInizio === v.dataFine ? v.dataInizio : `${v.dataInizio} → ${v.dataFine}`}</span>
-                    <button onClick={() => handleDeleteVacanza(v.id)} className="text-danger/60 hover:text-danger">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : <p className="text-sm text-fg-subtle">Nessuna vacanza o assenza inserita.</p>}
-        </section>
-      )}
 
       {annoAttivo && assegnazioni.length > 0 && (
         <section className="bg-surface rounded-sm border border-edge p-6">

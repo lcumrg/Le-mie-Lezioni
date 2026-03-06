@@ -68,14 +68,17 @@ export const STATO_UNITA_NEXT = {
 // ── Tipi vacanza ──
 export const TIPO_VACANZA = {
   VACANZA: 'vacanza',
-  CHIUSURA: 'chiusura',
-  ASSENZA: 'assenza',
+  CONGEDO: 'congedo',
+  MALATTIA: 'malattia',
 }
 
 export const TIPO_VACANZA_LABEL = {
   [TIPO_VACANZA.VACANZA]: 'Vacanza',
-  [TIPO_VACANZA.CHIUSURA]: 'Chiusura',
-  [TIPO_VACANZA.ASSENZA]: 'Assenza personale',
+  [TIPO_VACANZA.CONGEDO]: 'Congedo / Assenza',
+  [TIPO_VACANZA.MALATTIA]: 'Malattia / Imprevisto',
+  // backward compat
+  chiusura: 'Chiusura',
+  assenza: 'Assenza personale',
 }
 
 // ── Giorni ──

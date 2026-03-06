@@ -15,6 +15,7 @@ const ProgrammazionePage = lazy(() => import('./pages/ProgrammazionePage'))
 const ArchivioPage = lazy(() => import('./pages/ArchivioPage'))
 const ImpostazioniPage = lazy(() => import('./pages/ImpostazioniPage'))
 const ExportPage = lazy(() => import('./pages/ExportPage'))
+const AssenzePage = lazy(() => import('./pages/AssenzePage'))
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -55,6 +56,7 @@ function AppRoutes() {
           <Route path="/settimana" element={<SettimanaPage />} />
           <Route path="/percorsi" element={<PercorsiPage />} />
           <Route path="/programmazione" element={<ProgrammazionePage />} />
+          <Route path="/assenze" element={<AssenzePage />} />
           <Route path="/export" element={<ExportPage />} />
           <Route path="/archivio" element={<ArchivioPage />} />
           <Route path="/impostazioni" element={<ImpostazioniPage />} />

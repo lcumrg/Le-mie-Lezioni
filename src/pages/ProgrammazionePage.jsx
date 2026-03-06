@@ -621,10 +621,12 @@ export default function ProgrammazionePage() {
       {/* ── Ricorrenze grid (slot → percorso) ── */}
       {selectedClasse && classeOrarioSlots.length > 0 && classePercorsi.length > 0 && (
         <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-2">
             <h2 className="text-lg font-semibold text-fg">Ore ricorrenti</h2>
-            <span className="text-xs text-fg-subtle">Assegna un percorso fisso a ogni slot orario</span>
           </div>
+          <p className="text-xs text-fg-muted mb-3">
+            Assegna un percorso fisso a ogni slot orario della settimana. Quando generi le lezioni, verranno automaticamente collegate al percorso assegnato qui.
+          </p>
 
           <div className="bg-surface rounded-sm border border-edge overflow-x-auto">
             <table className="w-full text-sm">
@@ -655,7 +657,11 @@ export default function ProgrammazionePage() {
                       const color = ric ? percorsoColorMap[ric.percorsoId] : null
 
                       return (
-                        <td key={giorno} className="px-1 py-1">
+                        <td
+                          key={giorno}
+                          className="px-1 py-1"
+                          title={ric ? `Ogni ${GIORNI_SHORT[giorno]} alla ${ora}ª ora → ${ric.percorsoTitolo}` : `${GIORNI_SHORT[giorno]} ${ora}ª ora — non assegnata`}
+                        >
                           <select
                             value={ric?.percorsoId || ''}
                             onChange={(e) => handleRicorrenzaChange(giorno, ora, e.target.value || null)}
@@ -679,18 +685,35 @@ export default function ProgrammazionePage() {
             </table>
           </div>
 
-          {/* Riepilogo ore settimanali per percorso */}
+          {/* Riepilogo ore settimanali per percorso con previsione */}
           {Object.keys(orePerPercorsoSettimanali).length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-3 space-y-1.5">
               {Object.entries(orePerPercorsoSettimanali).map(([pId, info]) => {
                 const color = percorsoColorMap[pId] || PERCORSO_COLORS[0]
+                const units = unitaByPercorso[pId] || []
+                const oreTotali = units.reduce((s, u) => s + (u.orePreviste || 0), 0)
+                const settimaneStimate = info.oreSettimanali > 0 ? Math.ceil(oreTotali / info.oreSettimanali) : null
                 return (
-                  <span key={pId} className={`text-xs px-2 py-1 rounded-full ${color.bg} ${color.text} font-medium font-mono`}>
-                    {info.titolo}: {info.oreSettimanali}h/sett
-                  </span>
+                  <div key={pId} className={`flex items-center justify-between px-3 py-1.5 rounded-sm ${color.bg} border ${color.border}`}>
+                    <span className={`text-xs font-medium ${color.text}`}>
+                      {info.titolo}: {info.oreSettimanali}h/sett
+                    </span>
+                    {settimaneStimate !== null && oreTotali > 0 && (
+                      <span className="text-[10px] text-fg-muted font-mono">
+                        {oreTotali}h totali ~ {settimaneStimate} settimane
+                      </span>
+                    )}
+                  </div>
                 )
               })}
             </div>
+          )}
+
+          {/* Tooltip hint for slots */}
+          {Object.keys(classeRicorrenze).length > 0 && (
+            <p className="mt-2 text-[10px] text-fg-subtle italic">
+              Le assegnazioni ricorrenti vengono applicate automaticamente alla generazione delle lezioni.
+            </p>
           )}
         </div>
       )}

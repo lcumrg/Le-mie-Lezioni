@@ -47,6 +47,7 @@ export default function LessonGrid({
   onDeleteLezione,
   percorsi,
   giornoLibero,
+  onOpenPercorso,
 }) {
   const [selectedKey, setSelectedKey] = useState(null)
   const [editNote, setEditNote] = useState('')
@@ -509,7 +510,17 @@ export default function LessonGrid({
 
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
-              <label className="block text-xs font-medium text-fg-muted mb-1">Percorso</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-medium text-fg-muted">Percorso</label>
+                {onOpenPercorso && selectedPercorso && (
+                  <button
+                    onClick={() => onOpenPercorso(selectedPercorso)}
+                    className="text-[10px] text-link hover:text-link/80 font-medium"
+                  >
+                    Modifica percorso
+                  </button>
+                )}
+              </div>
               <PercorsoSelector
                 percorsi={(percorsi || []).filter(
                   (p) => p.classe === selectedLez.classe && p.materia === selectedLez.materia

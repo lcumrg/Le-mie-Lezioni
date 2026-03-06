@@ -22,6 +22,7 @@ const STATO_COLORS = {
   [STATO_UNITA.DA_FARE]: 'bg-overlay text-fg-muted',
   [STATO_UNITA.IN_CORSO]: 'bg-badge-warn text-warn',
   [STATO_UNITA.COMPLETATA]: 'bg-badge-s text-accent',
+  [STATO_UNITA.SALTATA]: 'bg-badge-x text-danger',
 }
 
 const STATO_LEZ_COLORS = {
@@ -330,7 +331,7 @@ export default function UnitaPanel({ percorso }) {
 
               return (
                 <Fragment key={u.id}>
-                  <tr className={`border-t border-edge-muted hover:bg-overlay/50 ${isExpanded ? 'bg-overlay/30' : ''}`}>
+                  <tr className={`border-t border-edge-muted hover:bg-overlay/50 ${isExpanded ? 'bg-overlay/30' : ''} ${u.stato === STATO_UNITA.SALTATA ? 'opacity-50' : ''}`}>
                     {/* # */}
                     <td className="px-2 py-1.5 text-fg-subtle font-mono text-xs">
                       {idx + 1}
@@ -353,7 +354,7 @@ export default function UnitaPanel({ percorso }) {
                         />
                       ) : (
                         <div
-                          className={`cursor-text ${u.stato === STATO_UNITA.COMPLETATA ? 'line-through text-fg-subtle' : 'text-fg'}`}
+                          className={`cursor-text ${u.stato === STATO_UNITA.COMPLETATA || u.stato === STATO_UNITA.SALTATA ? 'line-through text-fg-subtle' : 'text-fg'}`}
                           onDoubleClick={(e) => { e.stopPropagation(); startEdit(u.id, 'titolo', u.titolo) }}
                         >
                           <span className="text-sm font-medium">{u.titolo}</span>
@@ -416,6 +417,20 @@ export default function UnitaPanel({ percorso }) {
                         >
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const nuovoStato = u.stato === STATO_UNITA.SALTATA ? STATO_UNITA.DA_FARE : STATO_UNITA.SALTATA
+                            try {
+                              await updateUnita(percorso.id, u.id, { stato: nuovoStato })
+                            } catch { toast.error('Errore aggiornamento stato.') }
+                          }}
+                          className={`p-0.5 ${u.stato === STATO_UNITA.SALTATA ? 'text-danger' : 'text-danger/30 hover:text-danger/70'}`}
+                          title={u.stato === STATO_UNITA.SALTATA ? 'Ripristina unita' : 'Salta unita (non verra considerata)'}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 8.689c0-.864.933-1.406 1.683-.977l7.108 4.061a1.125 1.125 0 010 1.954l-7.108 4.061A1.125 1.125 0 013 16.811V8.69zM12.75 8.689c0-.864.933-1.406 1.683-.977l7.108 4.061a1.125 1.125 0 010 1.954l-7.108 4.061a1.125 1.125 0 01-1.683-.977V8.69z" />
                           </svg>
                         </button>
                         <button

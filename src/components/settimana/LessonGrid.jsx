@@ -22,10 +22,10 @@ const STATO_BADGE = {
 }
 
 const STATO_CELL = {
-  [STATO_LEZIONE.PIANIFICATA]: 'bg-badge-p/60',
-  [STATO_LEZIONE.SVOLTA]: 'bg-badge-s/60',
-  [STATO_LEZIONE.PARZIALE]: 'bg-badge-h/60',
-  [STATO_LEZIONE.SALTATA]: 'bg-badge-x/60',
+  [STATO_LEZIONE.PIANIFICATA]: 'bg-badge-p/40',
+  [STATO_LEZIONE.SVOLTA]: 'bg-badge-s/40',
+  [STATO_LEZIONE.PARZIALE]: 'bg-badge-h/40',
+  [STATO_LEZIONE.SALTATA]: 'bg-badge-x/40',
 }
 
 const STATO_CELL_BORDER = {
@@ -286,29 +286,9 @@ export default function LessonGrid({
       >
         <div className="flex items-center justify-between gap-1">
           <span className="text-sm font-bold text-fg leading-none">{lez.classe}</span>
-          <div className="flex gap-0.5">
-            {STATI_LEZIONE.map((s) => {
-              const isUpdating = updatingLezioni.has(lez.id)
-              return (
-                <button
-                  key={s}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onStatoChange(lez.id, s)
-                  }}
-                  disabled={isUpdating}
-                  className={`w-6 h-6 rounded text-[11px] font-bold leading-none flex items-center justify-center transition-colors ${
-                    lez.stato === s
-                      ? STATO_BADGE[s]
-                      : 'bg-overlay text-fg-subtle hover:bg-surface hover:text-fg-muted'
-                  } ${isUpdating ? 'opacity-50 pointer-events-none' : ''}`}
-                  title={STATO_LEZIONE_LABEL[s]}
-                >
-                  {STATO_LEZIONE_SHORT[s]}
-                </button>
-              )
-            })}
-          </div>
+          <span className={`text-[10px] font-bold px-1 py-0.5 rounded ${STATO_BADGE[lez.stato] || ''}`}>
+            {STATO_LEZIONE_SHORT[lez.stato]}
+          </span>
         </div>
 
         <span className="text-[11px] text-fg-muted leading-tight truncate mt-0.5">
@@ -317,9 +297,9 @@ export default function LessonGrid({
 
         {percorso && (
           <div className="mt-auto pt-0.5">
-            <div className="text-[10px] leading-tight text-special font-semibold truncate">{percorso.titolo}</div>
+            <div className="text-[10px] leading-tight text-special/80 truncate">{percorso.titolo}</div>
             {unita && (
-              <div className="text-[10px] leading-tight text-special/70 truncate">{unita.titolo}</div>
+              <div className="text-[10px] leading-tight text-fg-subtle truncate">{unita.titolo}</div>
             )}
           </div>
         )}
@@ -410,7 +390,7 @@ export default function LessonGrid({
                               ? 'hover:ring-2 hover:ring-link/40 hover:ring-inset'
                               : 'hover:bg-overlay/50'
                         }`}
-                        style={{ height: '5.5rem' }}
+                        style={{ height: '4.5rem' }}
                       >
                         {lez ? (
                           <div className={day.vacanza ? 'opacity-40 line-through' : ''}>{renderCell(lez)}</div>

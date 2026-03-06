@@ -40,25 +40,29 @@ export const STATO_UNITA = {
   DA_FARE: 'da_fare',
   IN_CORSO: 'in_corso',
   COMPLETATA: 'completata',
+  SALTATA: 'saltata',
 }
 
 export const STATO_UNITA_LABEL = {
   [STATO_UNITA.DA_FARE]: 'Da fare',
   [STATO_UNITA.IN_CORSO]: 'In corso',
   [STATO_UNITA.COMPLETATA]: 'Completata',
+  [STATO_UNITA.SALTATA]: 'Saltata',
 }
 
 export const STATI_UNITA = [
   STATO_UNITA.DA_FARE,
   STATO_UNITA.IN_CORSO,
   STATO_UNITA.COMPLETATA,
+  STATO_UNITA.SALTATA,
 ]
 
-// Ciclo stati unita (click per avanzare)
+// Ciclo stati unita (click per avanzare — saltata non nel ciclo, si attiva solo manualmente)
 export const STATO_UNITA_NEXT = {
   [STATO_UNITA.DA_FARE]: STATO_UNITA.IN_CORSO,
   [STATO_UNITA.IN_CORSO]: STATO_UNITA.COMPLETATA,
   [STATO_UNITA.COMPLETATA]: STATO_UNITA.DA_FARE,
+  [STATO_UNITA.SALTATA]: STATO_UNITA.DA_FARE,
 }
 
 // ── Tipi vacanza ──

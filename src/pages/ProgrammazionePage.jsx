@@ -32,6 +32,7 @@ const STATO_UNITA_DOT = {
   [STATO_UNITA.DA_FARE]: 'bg-edge',
   [STATO_UNITA.IN_CORSO]: 'bg-warn',
   [STATO_UNITA.COMPLETATA]: 'bg-accent',
+  [STATO_UNITA.SALTATA]: 'bg-danger',
 }
 
 // Color palette for percorsi (dark-friendly)
@@ -62,6 +63,7 @@ export default function ProgrammazionePage() {
   const [slidePanelPercorso, setSlidePanelPercorso] = useState(null)
   const [allLezioni, setAllLezioni] = useState([])
   const [showConsuntivo, setShowConsuntivo] = useState(false)
+  const [viewMode, setViewMode] = useState('detail') // 'detail' | 'panoramica'
 
   const giornoLibero = annoConfig?.giornoLibero ?? null
   const dataFineScuola = annoConfig?.dataFineScuola || null
@@ -110,7 +112,7 @@ export default function ProgrammazionePage() {
   )
 
   // All unita for selected class, in order (by percorso, then by ordine)
-  const allUnita = useMemo(() => {
+  const allUnitaInclSaltate = useMemo(() => {
     const result = []
     for (const p of classePercorsi) {
       const units = (unitaByPercorso[p.id] || [])
@@ -122,6 +124,14 @@ export default function ProgrammazionePage() {
     }
     return result
   }, [classePercorsi, unitaByPercorso])
+
+  // Active unita (exclude saltate — used for distribution and bilancio)
+  const allUnita = useMemo(() => {
+    return allUnitaInclSaltate.filter((u) => u.stato !== STATO_UNITA.SALTATA)
+  }, [allUnitaInclSaltate])
+
+  const unitaSaltate = allUnitaInclSaltate.filter((u) => u.stato === STATO_UNITA.SALTATA)
+  const oreSaltateUnita = unitaSaltate.reduce((s, u) => s + (u.orePreviste || 0), 0)
 
   // Weekly hours for selected class+materia
   const oreSettimanali = useMemo(() => {
@@ -551,9 +561,29 @@ export default function ProgrammazionePage() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      {/* Header + class selector */}
+      {/* Header + view toggle + class selector */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="text-2xl font-bold text-fg">Programmazione</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold text-fg">Programmazione</h1>
+          <div className="flex bg-overlay rounded-sm p-0.5 border border-edge-muted">
+            <button
+              onClick={() => setViewMode('detail')}
+              className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
+                viewMode === 'detail' ? 'bg-surface text-fg' : 'text-fg-muted hover:text-fg'
+              }`}
+            >
+              Dettaglio
+            </button>
+            <button
+              onClick={() => setViewMode('panoramica')}
+              className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
+                viewMode === 'panoramica' ? 'bg-surface text-fg' : 'text-fg-muted hover:text-fg'
+              }`}
+            >
+              Panoramica
+            </button>
+          </div>
+        </div>
         <div className="flex flex-wrap gap-1">
           {assegnazioniTabs.map((a) => (
             <button
@@ -571,6 +601,31 @@ export default function ProgrammazionePage() {
         </div>
       </div>
 
+      {/* ── PANORAMICA VIEW ── */}
+      {viewMode === 'panoramica' && dataFineScuola && (
+        <PanoramicaView
+          assegnazioniTabs={assegnazioniTabs}
+          allPercorsi={allPercorsi}
+          unitaByPercorso={unitaByPercorso}
+          allLezioni={allLezioni}
+          orari={orari}
+          vacanze={vacanze}
+          giornoLibero={giornoLibero}
+          dataFineScuola={dataFineScuola}
+          onSelectClasse={(classe, materia) => { setSelectedClasse(classe); setSelectedMateria(materia); setViewMode('detail') }}
+          onOpenPercorso={setSlidePanelPercorso}
+        />
+      )}
+
+      {viewMode === 'panoramica' && !dataFineScuola && (
+        <div className="p-6 bg-surface rounded-sm border border-edge text-center text-sm text-fg-subtle">
+          Configura la data di fine scuola nelle Impostazioni per vedere la panoramica.
+        </div>
+      )}
+
+      {/* ── DETAIL VIEW ── */}
+      {viewMode === 'detail' && <>
+
       {/* ── Ore summary banner (4 cards) ── */}
       {dataFineScuola && selectedClasse && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
@@ -582,7 +637,10 @@ export default function ProgrammazionePage() {
           <div className="p-3 bg-surface rounded-sm border border-edge text-center">
             <div className="text-2xl font-bold text-special font-mono">{orePianificate}</div>
             <div className="text-xs text-fg-muted">Ore pianificate</div>
-            <div className="text-[10px] text-fg-subtle font-mono">{allUnita.length} unita totali</div>
+            <div className="text-[10px] text-fg-subtle font-mono">
+              {allUnita.length} unita
+              {unitaSaltate.length > 0 && <span className="text-danger"> · {unitaSaltate.length} saltate ({oreSaltateUnita}h)</span>}
+            </div>
           </div>
           <div className="p-3 bg-surface rounded-sm border border-edge text-center">
             <div className="text-2xl font-bold text-accent font-mono">{oreSvolte}</div>
@@ -950,6 +1008,8 @@ export default function ProgrammazionePage() {
         </div>
       </div>
 
+      </>}
+
       {/* ── SlidePanel for editing percorso ── */}
       <SlidePanel
         open={slidePanelPercorso !== null}
@@ -961,6 +1021,180 @@ export default function ProgrammazionePage() {
           <UnitaPanel percorso={slidePanelPercorso} />
         )}
       </SlidePanel>
+    </div>
+  )
+}
+
+// ── Panoramica component (multi-class overview) ──
+function PanoramicaView({
+  assegnazioniTabs,
+  allPercorsi,
+  unitaByPercorso,
+  allLezioni,
+  orari,
+  vacanze,
+  giornoLibero,
+  dataFineScuola,
+  onSelectClasse,
+  onOpenPercorso,
+}) {
+  const fineScuola = parseISO(dataFineScuola)
+
+  // Compute remaining hours per class+materia
+  function computeOreRimaste(classe, materia) {
+    const oggi = new Date()
+    let current = startOfWeek(oggi, { weekStartsOn: 1 })
+    let ore = 0
+    while (isBefore(current, fineScuola)) {
+      for (let d = 0; d < 6; d++) {
+        if (d === giornoLibero) continue
+        const day = addDays(current, d)
+        if (isAfter(day, fineScuola)) continue
+        const isVacDay = vacanze.some((v) => !isBefore(day, parseISO(v.dataInizio)) && !isAfter(day, parseISO(v.dataFine)))
+        if (isVacDay) continue
+        ore += orari.filter((o) => o.giorno === d && o.classe === classe && o.materia === materia).length
+      }
+      current = addDays(current, 7)
+    }
+    return ore
+  }
+
+  const rows = assegnazioniTabs.map((a) => {
+    const percorsi = allPercorsi.filter((p) => p.classe === a.classe && p.materia === a.materia)
+    const allUnits = []
+    for (const p of percorsi) {
+      const units = (unitaByPercorso[p.id] || []).sort((x, y) => (x.ordine || 0) - (y.ordine || 0))
+      for (const u of units) allUnits.push({ ...u, percorsoId: p.id, percorsoTitolo: p.titolo })
+    }
+
+    const lezioni = allLezioni.filter((l) => l.classe === a.classe && l.materia === a.materia)
+    const oreSvolte = lezioni.reduce((s, l) => s + (ORE_EFFETTIVE[l.stato] || 0) * (l.ore || 1), 0)
+    const oreSaltateL = lezioni.filter((l) => l.stato === STATO_LEZIONE.SALTATA).reduce((s, l) => s + (l.ore || 1), 0)
+
+    const unitaAttive = allUnits.filter((u) => u.stato !== STATO_UNITA.SALTATA)
+    const unitaSaltate = allUnits.filter((u) => u.stato === STATO_UNITA.SALTATA)
+    const unitaCompletate = allUnits.filter((u) => u.stato === STATO_UNITA.COMPLETATA)
+    const unitaDaFare = allUnits.filter((u) => u.stato === STATO_UNITA.DA_FARE || u.stato === STATO_UNITA.IN_CORSO)
+
+    const orePianificate = unitaAttive.reduce((s, u) => s + (u.orePreviste || 0), 0)
+    const oreRimaste = computeOreRimaste(a.classe, a.materia)
+    const margine = oreRimaste - (orePianificate - oreSvolte)
+
+    return {
+      classe: a.classe,
+      materia: a.materia,
+      percorsi,
+      allUnits,
+      unitaAttive,
+      unitaSaltate,
+      unitaCompletate,
+      unitaDaFare,
+      orePianificate,
+      oreSvolte,
+      oreSaltateL,
+      oreRimaste,
+      margine,
+    }
+  })
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-fg-muted">
+        Panoramica di tutte le classi. Click su una riga per vedere i dettagli. Click su un percorso per modificare le unita.
+      </p>
+
+      <div className="bg-surface rounded-sm border border-edge overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-overlay border-b border-edge">
+              <th className="px-3 py-2 text-left text-xs font-medium text-fg-muted">Classe</th>
+              <th className="px-2 py-2 text-center text-xs font-medium text-fg-muted">Ore rimaste</th>
+              <th className="px-2 py-2 text-center text-xs font-medium text-fg-muted">Pianificate</th>
+              <th className="px-2 py-2 text-center text-xs font-medium text-fg-muted">Svolte</th>
+              <th className="px-2 py-2 text-center text-xs font-medium text-fg-muted">Margine</th>
+              <th className="px-2 py-2 text-center text-xs font-medium text-fg-muted">Unita</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-fg-muted">Percorsi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr
+                key={`${r.classe}||${r.materia}`}
+                className="border-b border-edge-muted last:border-b-0 hover:bg-overlay/50 cursor-pointer"
+                onClick={() => onSelectClasse(r.classe, r.materia)}
+              >
+                <td className="px-3 py-2.5">
+                  <span className="text-sm font-bold text-fg">{r.classe}</span>
+                  <span className="text-xs text-fg-muted ml-1.5">{r.materia}</span>
+                </td>
+                <td className="px-2 py-2.5 text-center">
+                  <span className="text-sm font-bold text-link font-mono">{r.oreRimaste}h</span>
+                </td>
+                <td className="px-2 py-2.5 text-center">
+                  <span className="text-sm font-mono text-special">{r.orePianificate}h</span>
+                  {r.unitaSaltate.length > 0 && (
+                    <div className="text-[10px] text-danger font-mono">-{r.unitaSaltate.reduce((s, u) => s + (u.orePreviste || 0), 0)}h saltate</div>
+                  )}
+                </td>
+                <td className="px-2 py-2.5 text-center">
+                  <span className="text-sm font-mono text-accent">{r.oreSvolte}h</span>
+                  {r.oreSaltateL > 0 && (
+                    <div className="text-[10px] text-danger font-mono">{r.oreSaltateL}h perse</div>
+                  )}
+                </td>
+                <td className="px-2 py-2.5 text-center">
+                  <span className={`text-sm font-bold font-mono ${r.margine >= 0 ? 'text-accent' : 'text-danger'}`}>
+                    {r.margine >= 0 ? '+' : ''}{r.margine}h
+                  </span>
+                </td>
+                <td className="px-2 py-2.5 text-center">
+                  <div className="text-xs font-mono text-fg-muted">
+                    <span className="text-accent">{r.unitaCompletate.length}</span>
+                    /<span>{r.unitaAttive.length}</span>
+                    {r.unitaSaltate.length > 0 && (
+                      <span className="text-danger ml-0.5">({r.unitaSaltate.length} skip)</span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex flex-wrap gap-1">
+                    {r.percorsi.map((p) => {
+                      const units = (unitaByPercorso[p.id] || [])
+                      const completate = units.filter((u) => u.stato === STATO_UNITA.COMPLETATA).length
+                      const pct = units.length > 0 ? Math.round((completate / units.length) * 100) : 0
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => onOpenPercorso(p)}
+                          className="text-[10px] px-1.5 py-0.5 rounded-sm bg-overlay border border-edge-muted text-fg-muted hover:border-link/40 hover:text-link transition-colors font-medium"
+                          title={`${p.titolo} — ${pct}% completato. Click per modificare.`}
+                        >
+                          {p.titolo}
+                          <span className="ml-1 font-mono text-fg-subtle">{pct}%</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Summary row */}
+      {rows.length > 0 && (
+        <div className="flex flex-wrap gap-4 text-xs text-fg-muted px-1">
+          <span>Totale ore rimaste: <strong className="text-link font-mono">{rows.reduce((s, r) => s + r.oreRimaste, 0)}h</strong></span>
+          <span>Totale pianificate: <strong className="text-special font-mono">{rows.reduce((s, r) => s + r.orePianificate, 0)}h</strong></span>
+          <span>Totale svolte: <strong className="text-accent font-mono">{rows.reduce((s, r) => s + r.oreSvolte, 0)}h</strong></span>
+          {rows.some((r) => r.margine < 0) && (
+            <span className="text-danger font-medium">
+              {rows.filter((r) => r.margine < 0).length} classi in ritardo
+            </span>
+          )}
+        </div>
+      )}
     </div>
   )
 }

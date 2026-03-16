@@ -64,8 +64,8 @@ export default function ProgrammazionePage() {
   const [allLezioni, setAllLezioni] = useState([])
   const [showConsuntivo, setShowConsuntivo] = useState(false)
   const [viewMode, setViewMode] = useState('detail') // 'detail' | 'panoramica'
-  const [dragSourceWeek, setDragSourceWeek] = useState(null)
-  const [dragOverWeek, setDragOverWeek] = useState(null)
+  const [dragSourceSlot, setDragSourceSlot] = useState(null)
+  const [dragOverSlot, setDragOverSlot] = useState(null)
 
   const giornoLibero = annoConfig?.giornoLibero ?? null
   const dataFineScuola = annoConfig?.dataFineScuola || null
@@ -264,6 +264,56 @@ export default function ProgrammazionePage() {
   // Current distribution for selected class
   const classeDistribuzioni = distribuzioni[selectedClasse] || {}
 
+  // ── Flat list of all lesson slots (one per actual hour) ──
+  // Key format: "yyyy-MM-dd_numeroOra" (e.g. "2026-03-17_1")
+  const slots = useMemo(() => {
+    if (!dataFineScuola || !selectedClasse) return []
+    const result = []
+    for (const week of weeks) {
+      for (let d = 0; d < 6; d++) {
+        if (d === giornoLibero) continue
+        const day = addDays(week.start, d)
+        const isVacDay = vacanze.some((v) => {
+          const vStart = parseISO(v.dataInizio)
+          const vEnd = parseISO(v.dataFine)
+          return !isBefore(day, vStart) && !isAfter(day, vEnd)
+        })
+        if (isVacDay) continue
+        const daySlots = classeOrarioSlots
+          .filter((s) => s.giorno === d)
+          .sort((a, b) => (a.numeroOra || 0) - (b.numeroOra || 0))
+        for (const slot of daySlots) {
+          const dateStr = format(day, 'yyyy-MM-dd')
+          const numeroOra = slot.numeroOra || 0
+          const key = `${dateStr}_${numeroOra}`
+          const ricKey = `${d}-${numeroOra}`
+          const ric = classeRicorrenze[ricKey]
+          result.push({
+            key,
+            dateStr,
+            weekStr: week.startStr,
+            weekLabel: week.label,
+            giorno: d,
+            numeroOra,
+            percorsoId: ric?.percorsoId || null,
+            percorsoTitolo: ric?.percorsoTitolo || null,
+          })
+        }
+      }
+    }
+    return result
+  }, [weeks, classeOrarioSlots, classeRicorrenze, giornoLibero, vacanze, dataFineScuola, selectedClasse])
+
+  // Group slots by week for display
+  const slotsByWeek = useMemo(() => {
+    const map = {}
+    for (const slot of slots) {
+      if (!map[slot.weekStr]) map[slot.weekStr] = { weekStr: slot.weekStr, label: slot.weekLabel, slots: [] }
+      map[slot.weekStr].slots.push(slot)
+    }
+    return Object.values(map).sort((a, b) => a.weekStr.localeCompare(b.weekStr))
+  }, [slots])
+
   // Current ricorrenze for selected class
   const classeRicorrenze = ricorrenze[selectedClasse] || {}
 
@@ -325,184 +375,85 @@ export default function ProgrammazionePage() {
     }
   }
 
-  // ── Redistribute from current week forward (Passo 4) ──
-  async function handleAutoDistributeFromNow() {
-    if (!selectedClasse || allUnita.length === 0 || weeks.length === 0) return
-    setDistributing(true)
-
-    try {
-      const oggi = format(new Date(), 'yyyy-MM-dd')
-      const newDist = { ...classeDistribuzioni }
-
-      // Remove future assignments only
-      for (const week of weeks) {
-        if (week.startStr >= oggi) {
-          delete newDist[week.startStr]
-        }
-      }
-
-      // Find which unita are already completed or in progress
-      const completedUnitaIds = new Set(
-        allUnita.filter((u) => u.stato === STATO_UNITA.COMPLETATA).map((u) => u.id)
-      )
-      const remainingUnita = allUnita.filter((u) => !completedUnitaIds.has(u.id))
-
-      // Simple sequential distribution for remaining weeks
-      let unitaIndex = 0
-      let oreAccumulate = 0
-
-      for (const week of weeks) {
-        if (week.startStr < oggi) continue // Skip past weeks
-        if (week.oreDisponibili === 0) continue
-        if (unitaIndex >= remainingUnita.length) break
-
-        const unita = remainingUnita[unitaIndex]
-        newDist[week.startStr] = {
+  // ── Manual slot assignment ──
+  async function handleSlotAssignment(slotKey, unitaId) {
+    const newDist = { ...classeDistribuzioni }
+    if (!unitaId) {
+      delete newDist[slotKey]
+    } else {
+      const unita = allUnita.find((u) => u.id === unitaId)
+      if (unita) {
+        newDist[slotKey] = {
           percorsoId: unita.percorsoId,
           unitaId: unita.id,
           percorsoTitolo: unita.percorsoTitolo,
           unitaTitolo: unita.titolo,
         }
-
-        oreAccumulate += week.oreDisponibili
-        if (oreAccumulate >= (unita.orePreviste || 1)) {
-          unitaIndex++
-          oreAccumulate = 0
-        }
       }
-
+    }
+    try {
       await setDistribuzioniClasse(selectedClasse, newDist)
-      toast.success('Distribuzione aggiornata dalle settimane rimanenti')
     } catch (err) {
-      toast.error('Errore durante la ridistribuzione.')
-    } finally {
-      setDistributing(false)
+      toast.error("Errore durante l'assegnazione.")
     }
   }
 
-  // ── Auto-distribute ──
-  async function handleAutoDistribute() {
-    if (!selectedClasse || allUnita.length === 0 || weeks.length === 0) return
-    setDistributing(true)
-
+  // ── Swap two slot assignments (drag & drop) ──
+  async function handleSwapSlots(sourceKey, targetKey) {
+    if (sourceKey === targetKey) return
+    const newDist = { ...classeDistribuzioni }
+    const src = newDist[sourceKey]
+    const tgt = newDist[targetKey]
+    if (tgt) { newDist[sourceKey] = tgt } else { delete newDist[sourceKey] }
+    if (src) { newDist[targetKey] = src } else { delete newDist[targetKey] }
     try {
-      const hasRicorrenze = Object.keys(classeRicorrenze).length > 0
+      await setDistribuzioniClasse(selectedClasse, newDist)
+    } catch (err) {
+      toast.error('Errore durante lo spostamento.')
+    }
+  }
 
-      if (hasRicorrenze) {
-        // ── Smart distribution using ricorrenze ──
-        // Each percorso gets its units distributed based on weekly recurring hours
-        const newDist = {}
-
-        // Group unita by percorso
-        const unitaPerPercorso = {}
-        for (const u of allUnita) {
-          if (!unitaPerPercorso[u.percorsoId]) unitaPerPercorso[u.percorsoId] = []
-          unitaPerPercorso[u.percorsoId].push(u)
+  // ── Auto-distribute: assign units to slots per-percorso sequentially ──
+  function buildDistribution(slotsToFill, keepExisting = false) {
+    const newDist = keepExisting ? { ...classeDistribuzioni } : {}
+    // Group slots by percorsoId
+    const slotsByPercorso = {}
+    for (const slot of slotsToFill) {
+      if (!slot.percorsoId) continue
+      if (!slotsByPercorso[slot.percorsoId]) slotsByPercorso[slot.percorsoId] = []
+      slotsByPercorso[slot.percorsoId].push(slot)
+    }
+    // For each percorso, sequentially assign units
+    for (const [pId, pSlots] of Object.entries(slotsByPercorso)) {
+      const units = (unitaByPercorso[pId] || [])
+        .filter((u) => u.stato !== STATO_UNITA.SALTATA)
+        .slice()
+        .sort((a, b) => (a.ordine || 0) - (b.ordine || 0))
+      let unitaIndex = 0
+      let count = 0
+      for (const slot of pSlots) {
+        if (unitaIndex >= units.length) break
+        const unita = units[unitaIndex]
+        newDist[slot.key] = {
+          percorsoId: unita.percorsoId,
+          unitaId: unita.id,
+          percorsoTitolo: unita.percorsoTitolo,
+          unitaTitolo: unita.titolo,
         }
-
-        // Track progress per percorso
-        const progressPerPercorso = {} // percorsoId -> { unitaIndex, oreAccumulate }
-        for (const pId of Object.keys(unitaPerPercorso)) {
-          progressPerPercorso[pId] = { unitaIndex: 0, oreAccumulate: 0 }
-        }
-
-        // For each week, determine how many hours each percorso gets
-        // based on which days of the week are available (not vacation)
-        for (const week of weeks) {
-          if (week.oreDisponibili === 0) continue
-
-          // Count per-percorso hours for this specific week
-          // by checking which day slots are actually available (not vacation)
-          const orePercorsoThisWeek = {} // percorsoId -> hours
-
-          for (let d = 0; d < 6; d++) {
-            if (d === giornoLibero) continue
-
-            const day = addDays(week.start, d)
-            // Check if this day is vacation
-            const isVacDay = vacanze.some((v) => {
-              const vStart = parseISO(v.dataInizio)
-              const vEnd = parseISO(v.dataFine)
-              return !isBefore(day, vStart) && !isAfter(day, vEnd)
-            })
-            if (isVacDay) continue
-
-            // Find all orario slots for this day
-            const daySlots = classeOrarioSlots.filter((s) => s.giorno === d)
-            for (const slot of daySlots) {
-              const key = `${d}-${slot.numeroOra || 0}`
-              const ric = classeRicorrenze[key]
-              if (ric?.percorsoId) {
-                orePercorsoThisWeek[ric.percorsoId] = (orePercorsoThisWeek[ric.percorsoId] || 0) + 1
-              }
-            }
-          }
-
-          // For each percorso that has hours this week, advance its unit distribution
-          // A week can have multiple percorsi — store the one with the most hours as the main assignment,
-          // but we track all percorso progress
-          let mainAssignment = null
-          let maxOre = 0
-
-          for (const [pId, ore] of Object.entries(orePercorsoThisWeek)) {
-            const prog = progressPerPercorso[pId]
-            const units = unitaPerPercorso[pId]
-            if (!prog || !units || prog.unitaIndex >= units.length) continue
-
-            const currentUnit = units[prog.unitaIndex]
-            prog.oreAccumulate += ore
-
-            // Store assignment for the percorso with most hours this week
-            if (ore > maxOre) {
-              maxOre = ore
-              mainAssignment = {
-                percorsoId: currentUnit.percorsoId,
-                unitaId: currentUnit.id,
-                percorsoTitolo: currentUnit.percorsoTitolo,
-                unitaTitolo: currentUnit.titolo,
-              }
-            }
-
-            // Move to next unit if enough hours accumulated
-            if (prog.oreAccumulate >= (currentUnit.orePreviste || 1)) {
-              prog.unitaIndex++
-              prog.oreAccumulate = 0
-            }
-          }
-
-          if (mainAssignment) {
-            newDist[week.startStr] = mainAssignment
-          }
-        }
-
-        await setDistribuzioniClasse(selectedClasse, newDist)
-      } else {
-        // ── Simple sequential distribution (original algorithm) ──
-        const newDist = {}
-        let unitaIndex = 0
-        let oreAccumulate = 0
-
-        for (const week of weeks) {
-          if (week.oreDisponibili === 0) continue
-          if (unitaIndex >= allUnita.length) break
-
-          const unita = allUnita[unitaIndex]
-          newDist[week.startStr] = {
-            percorsoId: unita.percorsoId,
-            unitaId: unita.id,
-            percorsoTitolo: unita.percorsoTitolo,
-            unitaTitolo: unita.titolo,
-          }
-
-          oreAccumulate += week.oreDisponibili
-          if (oreAccumulate >= (unita.orePreviste || 1)) {
-            unitaIndex++
-            oreAccumulate = 0
-          }
-        }
-
-        await setDistribuzioniClasse(selectedClasse, newDist)
+        count++
+        if (count >= (unita.orePreviste || 1)) { unitaIndex++; count = 0 }
       }
+    }
+    return newDist
+  }
+
+  async function handleAutoDistribute() {
+    if (!selectedClasse || allUnita.length === 0 || slots.length === 0) return
+    setDistributing(true)
+    try {
+      const newDist = buildDistribution(slots, false)
+      await setDistribuzioniClasse(selectedClasse, newDist)
+      toast.success('Distribuzione completata')
     } catch (err) {
       toast.error('Errore durante la distribuzione automatica.')
     } finally {
@@ -510,53 +461,53 @@ export default function ProgrammazionePage() {
     }
   }
 
-  // ── Manual week assignment change ──
-  async function handleWeekAssignment(weekStr, unitaId) {
-    const newDist = { ...classeDistribuzioni }
-
-    if (!unitaId) {
-      delete newDist[weekStr]
-    } else {
-      const unita = allUnita.find((u) => u.id === unitaId)
-      if (unita) {
-        newDist[weekStr] = {
-          percorsoId: unita.percorsoId,
-          unitaId: unita.id,
-          percorsoTitolo: unita.percorsoTitolo,
-          unitaTitolo: unita.titolo,
+  async function handleAutoDistributeFromNow() {
+    if (!selectedClasse || allUnita.length === 0 || slots.length === 0) return
+    setDistributing(true)
+    try {
+      const oggi = format(new Date(), 'yyyy-MM-dd')
+      // Remove future slot assignments, keep past
+      const newDistBase = { ...classeDistribuzioni }
+      for (const slot of slots) {
+        if (slot.dateStr >= oggi) delete newDistBase[slot.key]
+      }
+      const futureSlots = slots.filter((s) => s.dateStr >= oggi)
+      // Find remaining units (non-completed)
+      const completedIds = new Set(allUnita.filter((u) => u.stato === STATO_UNITA.COMPLETATA).map((u) => u.id))
+      const remainingSlots = futureSlots.filter((s) => s.percorsoId)
+      // Build a fresh distribution for future slots only
+      const slotsByPercorso = {}
+      for (const slot of remainingSlots) {
+        if (!slotsByPercorso[slot.percorsoId]) slotsByPercorso[slot.percorsoId] = []
+        slotsByPercorso[slot.percorsoId].push(slot)
+      }
+      for (const [pId, pSlots] of Object.entries(slotsByPercorso)) {
+        const units = (unitaByPercorso[pId] || [])
+          .filter((u) => u.stato !== STATO_UNITA.SALTATA && !completedIds.has(u.id))
+          .slice()
+          .sort((a, b) => (a.ordine || 0) - (b.ordine || 0))
+        let unitaIndex = 0
+        let count = 0
+        for (const slot of pSlots) {
+          if (unitaIndex >= units.length) break
+          const unita = units[unitaIndex]
+          newDistBase[slot.key] = {
+            percorsoId: unita.percorsoId,
+            unitaId: unita.id,
+            percorsoTitolo: unita.percorsoTitolo,
+            unitaTitolo: unita.titolo,
+          }
+          count++
+          if (count >= (unita.orePreviste || 1)) { unitaIndex++; count = 0 }
         }
       }
-    }
-
-    try {
-      await setDistribuzioniClasse(selectedClasse, newDist)
+      await setDistribuzioniClasse(selectedClasse, newDistBase)
+      toast.success('Distribuzione aggiornata dalle settimane rimanenti')
     } catch (err) {
-      toast.error('Errore durante l\'assegnazione della settimana.')
+      toast.error('Errore durante la ridistribuzione.')
+    } finally {
+      setDistributing(false)
     }
-  }
-
-  // ── Swap two week assignments ──
-  async function handleSwapWeeks(sourceStr, targetStr) {
-    if (sourceStr === targetStr) { setMoveSourceWeek(null); return }
-    const newDist = { ...classeDistribuzioni }
-    const sourceAssignment = newDist[sourceStr]
-    const targetAssignment = newDist[targetStr]
-    if (targetAssignment) {
-      newDist[sourceStr] = targetAssignment
-    } else {
-      delete newDist[sourceStr]
-    }
-    if (sourceAssignment) {
-      newDist[targetStr] = sourceAssignment
-    } else {
-      delete newDist[targetStr]
-    }
-    try {
-      await setDistribuzioniClasse(selectedClasse, newDist)
-    } catch (err) {
-      toast.error('Errore durante lo spostamento.')
-    }
-    setMoveSourceWeek(null)
   }
 
   if (configLoading || loading) return <LoadingSpinner />
@@ -896,7 +847,7 @@ export default function ProgrammazionePage() {
               >
                 Consuntivo
               </button>
-              {allUnita.length > 0 && weeks.length > 0 && (
+              {allUnita.length > 0 && slots.length > 0 && (
                 <>
                   <button
                     onClick={handleAutoDistributeFromNow}
@@ -917,121 +868,124 @@ export default function ProgrammazionePage() {
             </div>
           </div>
 
-          {weeks.length === 0 ? (
+          {slots.length === 0 ? (
             <div className="p-6 bg-surface rounded-sm border border-edge text-center text-sm text-fg-subtle">
               {!dataFineScuola
                 ? 'Configura la data di fine scuola nelle Impostazioni.'
-                : oreSettimanali === 0
+                : classeOrarioSlots.length === 0
                   ? `Nessun orario definito per ${selectedClasse} ${selectedMateria}.`
-                  : 'Nessuna settimana disponibile.'}
+                  : 'Nessuna lezione disponibile.'}
             </div>
           ) : (
             <div className="bg-surface rounded-sm border border-edge overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-overlay border-b border-edge">
-                    <th className="px-3 py-2 text-left text-xs font-medium text-fg-muted w-32">Settimana</th>
-                    <th className="px-2 py-2 text-center text-xs font-medium text-fg-muted w-12">Ore</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-fg-muted">Attivita prevista</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-fg-muted w-24">Data</th>
+                    <th className="px-2 py-2 text-center text-xs font-medium text-fg-muted w-10">Ora</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-fg-muted w-28">Percorso</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-fg-muted">Unita prevista</th>
                     {showConsuntivo && (
-                      <th className="px-2 py-2 text-center text-xs font-medium text-fg-muted w-24">Effettivo</th>
+                      <th className="px-2 py-2 text-center text-xs font-medium text-fg-muted w-20">Effettivo</th>
                     )}
                   </tr>
                 </thead>
                 <tbody>
-                  {weeks.map((week) => {
-                    const assignment = classeDistribuzioni[week.startStr]
-                    const color = assignment ? percorsoColorMap[assignment.percorsoId] : null
+                  {(() => {
                     const oggi = format(new Date(), 'yyyy-MM-dd')
-                    const isPast = week.startStr < oggi
-                    const isCurrent = !isPast && week.startStr <= format(addDays(new Date(), 6), 'yyyy-MM-dd')
-                    const consuntivo = consuntivoPerSettimana[week.startStr]
-                    const isMovable = !week.isVacanza && week.oreDisponibili > 0
-                    const isDragSource = dragSourceWeek === week.startStr
-                    const isDragOver = dragOverWeek === week.startStr && dragSourceWeek !== week.startStr
-
-                    return (
-                      <tr
-                        key={week.startStr}
-                        draggable={isMovable}
-                        onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; setDragSourceWeek(week.startStr) }}
-                        onDragOver={(e) => { if (isMovable && dragSourceWeek && dragSourceWeek !== week.startStr) { e.preventDefault(); setDragOverWeek(week.startStr) } }}
-                        onDragLeave={() => setDragOverWeek(null)}
-                        onDrop={(e) => { e.preventDefault(); if (dragSourceWeek) handleSwapWeeks(dragSourceWeek, week.startStr); setDragOverWeek(null) }}
-                        onDragEnd={() => { setDragSourceWeek(null); setDragOverWeek(null) }}
-                        className={`border-b border-edge-muted last:border-b-0 transition-colors ${
-                          isDragOver ? 'bg-link/15 outline outline-2 outline-link/40'
-                          : isDragSource ? 'opacity-40'
-                          : week.isVacanza ? 'bg-badge-warn/30'
-                          : isCurrent ? 'bg-link/5 border-l-2 border-l-link'
-                          : isPast ? 'bg-canvas/50'
-                          : 'bg-surface hover:bg-overlay'
-                        } ${isMovable ? 'cursor-grab active:cursor-grabbing' : ''}`}
-                      >
-                        <td className={`px-3 py-2 text-xs font-medium whitespace-nowrap ${
-                          isCurrent ? 'text-link' : isPast ? 'text-fg-subtle' : 'text-fg-muted'
-                        }`}>
-                          {isCurrent && <span className="mr-1">&#9654;</span>}
-                          {week.label}
-                        </td>
-                        <td className="px-2 py-2 text-center">
-                          {week.isVacanza ? (
-                            <span className="text-[10px] text-warn">—</span>
-                          ) : (
-                            <span className={`text-xs font-semibold font-mono ${week.oreDisponibili > 0 ? (isPast ? 'text-fg-subtle' : 'text-fg') : 'text-fg-subtle'}`}>
-                              {week.oreDisponibili}h
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2">
-                          {week.isVacanza ? (
-                            <span className="text-xs text-warn italic">
-                              {week.vacanzaNome || 'Vacanza'}
-                            </span>
-                          ) : week.oreDisponibili === 0 ? (
-                            <span className="text-xs text-fg-subtle">—</span>
-                          ) : (
-                            <select
-                              value={assignment?.unitaId || ''}
-                              onChange={(e) => handleWeekAssignment(week.startStr, e.target.value || null)}
-                              onMouseDown={(e) => e.stopPropagation()}
-                              className={`w-full px-2 py-1 rounded-sm text-xs border outline-none ${
-                                assignment
-                                  ? `${color?.bg || 'bg-overlay'} ${color?.border || 'border-edge'} ${color?.text || 'text-fg'} font-medium`
-                                  : 'bg-inset border-edge text-fg-subtle'
-                              }`}
-                            >
-                              <option value="">— non assegnata —</option>
-                              {allUnita.map((u) => (
-                                <option key={u.id} value={u.id}>
-                                  {u.percorsoTitolo} / {u.titolo} ({u.orePreviste}h)
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                        </td>
-                        {showConsuntivo && (
-                          <td className="px-2 py-2 text-center">
-                            {consuntivo ? (
-                              <div className="flex items-center justify-center gap-1">
-                                {consuntivo.svolte > 0 && (
-                                  <span className="text-[10px] font-bold text-accent font-mono">{consuntivo.svolte}S</span>
-                                )}
-                                {consuntivo.parziali > 0 && (
-                                  <span className="text-[10px] font-bold text-warn font-mono">{consuntivo.parziali}½</span>
-                                )}
-                                {consuntivo.saltate > 0 && (
-                                  <span className="text-[10px] font-bold text-danger font-mono">{consuntivo.saltate}X</span>
-                                )}
-                              </div>
-                            ) : isPast && !week.isVacanza && week.oreDisponibili > 0 ? (
-                              <span className="text-[10px] text-fg-subtle">—</span>
-                            ) : null}
+                    const rows = []
+                    for (const weekGroup of slotsByWeek) {
+                      const weekConsuntivo = consuntivoPerSettimana[weekGroup.weekStr]
+                      const isCurrentWeek = oggi >= weekGroup.weekStr && oggi <= format(addDays(parseISO(weekGroup.weekStr), 6), 'yyyy-MM-dd')
+                      // Week header row
+                      rows.push(
+                        <tr key={`week-${weekGroup.weekStr}`} className="bg-overlay border-b border-edge">
+                          <td colSpan={showConsuntivo ? 5 : 4} className="px-3 py-1">
+                            <div className="flex items-center justify-between">
+                              <span className={`text-[11px] font-semibold ${isCurrentWeek ? 'text-link' : 'text-fg-muted'}`}>
+                                {isCurrentWeek && <span className="mr-1">&#9654;</span>}
+                                {weekGroup.label}
+                              </span>
+                              {showConsuntivo && weekConsuntivo && (
+                                <div className="flex items-center gap-1">
+                                  {weekConsuntivo.svolte > 0 && <span className="text-[10px] font-bold text-accent font-mono">{weekConsuntivo.svolte}S</span>}
+                                  {weekConsuntivo.parziali > 0 && <span className="text-[10px] font-bold text-warn font-mono">{weekConsuntivo.parziali}½</span>}
+                                  {weekConsuntivo.saltate > 0 && <span className="text-[10px] font-bold text-danger font-mono">{weekConsuntivo.saltate}X</span>}
+                                </div>
+                              )}
+                            </div>
                           </td>
-                        )}
-                      </tr>
-                    )
-                  })}
+                        </tr>
+                      )
+                      // Slot rows
+                      for (const slot of weekGroup.slots) {
+                        const assignment = classeDistribuzioni[slot.key]
+                        const color = assignment ? percorsoColorMap[assignment.percorsoId] : (slot.percorsoId ? percorsoColorMap[slot.percorsoId] : null)
+                        const isPast = slot.dateStr < oggi
+                        const isDragSource = dragSourceSlot === slot.key
+                        const isDragOver = dragOverSlot === slot.key && dragSourceSlot !== slot.key
+                        // Units for the percorso of this slot (if ricorrenza set), otherwise all units
+                        const slotUnits = slot.percorsoId
+                          ? allUnita.filter((u) => u.percorsoId === slot.percorsoId)
+                          : allUnita
+
+                        rows.push(
+                          <tr
+                            key={slot.key}
+                            draggable
+                            onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; setDragSourceSlot(slot.key) }}
+                            onDragOver={(e) => { if (dragSourceSlot && dragSourceSlot !== slot.key) { e.preventDefault(); setDragOverSlot(slot.key) } }}
+                            onDragLeave={() => setDragOverSlot(null)}
+                            onDrop={(e) => { e.preventDefault(); if (dragSourceSlot) handleSwapSlots(dragSourceSlot, slot.key); setDragOverSlot(null) }}
+                            onDragEnd={() => { setDragSourceSlot(null); setDragOverSlot(null) }}
+                            className={`border-b border-edge-muted last:border-b-0 transition-colors cursor-grab active:cursor-grabbing ${
+                              isDragOver ? 'bg-link/15 outline outline-2 outline-link/40'
+                              : isDragSource ? 'opacity-40'
+                              : isPast ? 'bg-canvas/50'
+                              : 'hover:bg-overlay'
+                            }`}
+                          >
+                            <td className={`px-3 py-1.5 text-xs whitespace-nowrap font-mono ${isPast ? 'text-fg-subtle' : 'text-fg-muted'}`}>
+                              {format(parseISO(slot.dateStr), 'EEE d/M', { locale: it })}
+                            </td>
+                            <td className="px-2 py-1.5 text-center">
+                              <span className="text-[11px] font-mono text-fg-subtle">{slot.numeroOra}ª</span>
+                            </td>
+                            <td className="px-2 py-1.5">
+                              {slot.percorsoId ? (
+                                <span className={`inline-block px-1.5 py-0.5 rounded-sm text-[10px] font-semibold border truncate max-w-[100px] ${color?.bg || 'bg-overlay'} ${color?.border || 'border-edge'} ${color?.text || 'text-fg'}`}>
+                                  {slot.percorsoTitolo}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-fg-subtle italic">—</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-1.5">
+                              <select
+                                value={assignment?.unitaId || ''}
+                                onChange={(e) => handleSlotAssignment(slot.key, e.target.value || null)}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                className={`w-full px-2 py-0.5 rounded-sm text-xs border outline-none ${
+                                  assignment
+                                    ? `${color?.bg || 'bg-overlay'} ${color?.border || 'border-edge'} ${color?.text || 'text-fg'} font-medium`
+                                    : 'bg-inset border-edge text-fg-subtle'
+                                }`}
+                              >
+                                <option value="">— non assegnata —</option>
+                                {slotUnits.map((u) => (
+                                  <option key={u.id} value={u.id}>
+                                    {slot.percorsoId ? u.titolo : `${u.percorsoTitolo} / ${u.titolo}`} ({u.orePreviste}h)
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            {showConsuntivo && <td />}
+                          </tr>
+                        )
+                      }
+                    }
+                    return rows
+                  })()}
                 </tbody>
               </table>
             </div>

@@ -64,6 +64,7 @@ export default function ProgrammazionePage() {
   const [allLezioni, setAllLezioni] = useState([])
   const [showConsuntivo, setShowConsuntivo] = useState(false)
   const [viewMode, setViewMode] = useState('detail') // 'detail' | 'panoramica'
+  const [moveSourceWeek, setMoveSourceWeek] = useState(null) // weekStartStr of the week being moved
 
   const giornoLibero = annoConfig?.giornoLibero ?? null
   const dataFineScuola = annoConfig?.dataFineScuola || null
@@ -533,6 +534,30 @@ export default function ProgrammazionePage() {
     }
   }
 
+  // ── Swap two week assignments ──
+  async function handleSwapWeeks(sourceStr, targetStr) {
+    if (sourceStr === targetStr) { setMoveSourceWeek(null); return }
+    const newDist = { ...classeDistribuzioni }
+    const sourceAssignment = newDist[sourceStr]
+    const targetAssignment = newDist[targetStr]
+    if (targetAssignment) {
+      newDist[sourceStr] = targetAssignment
+    } else {
+      delete newDist[sourceStr]
+    }
+    if (sourceAssignment) {
+      newDist[targetStr] = sourceAssignment
+    } else {
+      delete newDist[targetStr]
+    }
+    try {
+      await setDistribuzioniClasse(selectedClasse, newDist)
+    } catch (err) {
+      toast.error('Errore durante lo spostamento.')
+    }
+    setMoveSourceWeek(null)
+  }
+
   if (configLoading || loading) return <LoadingSpinner />
 
   if (!annoAttivo) {
@@ -858,8 +883,23 @@ export default function ProgrammazionePage() {
         {/* ── RIGHT: Timeline ── */}
         <div className="lg:col-span-2">
           <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-            <h2 className="text-lg font-semibold text-fg">Timeline</h2>
             <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-fg">Timeline</h2>
+              {moveSourceWeek && (
+                <span className="text-xs text-warn font-medium px-2 py-0.5 bg-badge-warn border border-warn/30 rounded-sm">
+                  Seleziona la settimana di destinazione
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {moveSourceWeek && (
+                <button
+                  onClick={() => setMoveSourceWeek(null)}
+                  className="px-2 py-1 text-xs font-medium rounded-sm border bg-overlay text-fg-muted border-edge-muted hover:text-fg"
+                >
+                  Annulla spostamento
+                </button>
+              )}
               <button
                 onClick={() => setShowConsuntivo(!showConsuntivo)}
                 className={`px-2 py-1 text-xs font-medium rounded-sm border transition-colors ${
@@ -920,21 +960,31 @@ export default function ProgrammazionePage() {
                     const isPast = week.startStr < oggi
                     const isCurrent = !isPast && week.startStr <= format(addDays(new Date(), 6), 'yyyy-MM-dd')
                     const consuntivo = consuntivoPerSettimana[week.startStr]
+                    const isMovable = !week.isVacanza && week.oreDisponibili > 0
+                    const isMoveSource = moveSourceWeek === week.startStr
+                    const isMoveTarget = moveSourceWeek && moveSourceWeek !== week.startStr && isMovable
 
                     return (
                       <tr
                         key={week.startStr}
+                        onClick={isMoveTarget ? () => handleSwapWeeks(moveSourceWeek, week.startStr) : undefined}
                         className={`border-b border-edge-muted last:border-b-0 ${
-                          week.isVacanza ? 'bg-badge-warn/30'
+                          isMoveSource ? 'bg-warn/10 border-l-2 border-l-warn'
+                          : isMoveTarget ? 'bg-link/5 cursor-pointer hover:bg-link/10'
+                          : week.isVacanza ? 'bg-badge-warn/30'
                           : isCurrent ? 'bg-link/5 border-l-2 border-l-link'
                           : isPast ? 'bg-canvas/50'
                           : 'bg-surface hover:bg-overlay'
                         }`}
                       >
                         <td className={`px-3 py-2 text-xs font-medium whitespace-nowrap ${
-                          isCurrent ? 'text-link' : isPast ? 'text-fg-subtle' : 'text-fg-muted'
+                          isMoveSource ? 'text-warn'
+                          : isCurrent ? 'text-link'
+                          : isPast ? 'text-fg-subtle'
+                          : 'text-fg-muted'
                         }`}>
-                          {isCurrent && <span className="mr-1">&#9654;</span>}
+                          {isCurrent && !isMoveSource && <span className="mr-1">&#9654;</span>}
+                          {isMoveSource && <span className="mr-1">&#8597;</span>}
                           {week.label}
                         </td>
                         <td className="px-2 py-2 text-center">
@@ -953,23 +1003,55 @@ export default function ProgrammazionePage() {
                             </span>
                           ) : week.oreDisponibili === 0 ? (
                             <span className="text-xs text-fg-subtle">—</span>
+                          ) : isMoveTarget ? (
+                            <div className="flex items-center gap-2">
+                              {assignment ? (
+                                <span className={`flex-1 px-2 py-1 rounded-sm text-xs border font-medium ${color?.bg || 'bg-overlay'} ${color?.border || 'border-edge'} ${color?.text || 'text-fg'}`}>
+                                  {assignment.unitaTitolo}
+                                </span>
+                              ) : (
+                                <span className="flex-1 text-xs text-fg-subtle italic">non assegnata</span>
+                              )}
+                              <span className="text-xs text-link font-medium shrink-0">↔ sposta qui</span>
+                            </div>
                           ) : (
-                            <select
-                              value={assignment?.unitaId || ''}
-                              onChange={(e) => handleWeekAssignment(week.startStr, e.target.value || null)}
-                              className={`w-full px-2 py-1 rounded-sm text-xs border outline-none ${
-                                assignment
-                                  ? `${color?.bg || 'bg-overlay'} ${color?.border || 'border-edge'} ${color?.text || 'text-fg'} font-medium`
-                                  : 'bg-inset border-edge text-fg-subtle'
-                              }`}
-                            >
-                              <option value="">— non assegnata —</option>
-                              {allUnita.map((u) => (
-                                <option key={u.id} value={u.id}>
-                                  {u.percorsoTitolo} / {u.titolo} ({u.orePreviste}h)
-                                </option>
-                              ))}
-                            </select>
+                            <div className="flex items-center gap-1.5">
+                              <select
+                                value={assignment?.unitaId || ''}
+                                onChange={(e) => handleWeekAssignment(week.startStr, e.target.value || null)}
+                                disabled={!!moveSourceWeek}
+                                className={`flex-1 px-2 py-1 rounded-sm text-xs border outline-none disabled:opacity-60 ${
+                                  assignment
+                                    ? `${color?.bg || 'bg-overlay'} ${color?.border || 'border-edge'} ${color?.text || 'text-fg'} font-medium`
+                                    : 'bg-inset border-edge text-fg-subtle'
+                                }`}
+                              >
+                                <option value="">— non assegnata —</option>
+                                {allUnita.map((u) => (
+                                  <option key={u.id} value={u.id}>
+                                    {u.percorsoTitolo} / {u.titolo} ({u.orePreviste}h)
+                                  </option>
+                                ))}
+                              </select>
+                              {!moveSourceWeek && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setMoveSourceWeek(week.startStr) }}
+                                  title="Sposta questa settimana"
+                                  className="px-1.5 py-1 text-xs text-fg-subtle hover:text-warn border border-transparent hover:border-warn/30 rounded-sm transition-colors shrink-0"
+                                >
+                                  ↕
+                                </button>
+                              )}
+                              {isMoveSource && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setMoveSourceWeek(null) }}
+                                  title="Annulla spostamento"
+                                  className="px-1.5 py-1 text-xs text-warn border border-warn/30 rounded-sm shrink-0"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
                           )}
 
                         </td>

@@ -264,6 +264,43 @@ export default function ProgrammazionePage() {
   // Current distribution for selected class
   const classeDistribuzioni = distribuzioni[selectedClasse] || {}
 
+  // Current ricorrenze for selected class
+  const classeRicorrenze = ricorrenze[selectedClasse] || {}
+
+  // Build orario grid for selected class+materia: array of { giorno, numeroOra, oraInizio, oraFine }
+  const classeOrarioSlots = useMemo(() => {
+    if (!selectedClasse) return []
+    return orari
+      .filter((o) => o.classe === selectedClasse && o.materia === selectedMateria && o.giorno !== giornoLibero)
+      .sort((a, b) => a.giorno - b.giorno || (a.numeroOra || 0) - (b.numeroOra || 0))
+  }, [selectedClasse, selectedMateria, orari, giornoLibero])
+
+  // Unique giorni that have slots for this class
+  const giorniConOre = useMemo(() => {
+    const set = new Set(classeOrarioSlots.map((s) => s.giorno))
+    return [...set].sort()
+  }, [classeOrarioSlots])
+
+  // Unique ore (numeroOra) across all giorni for this class
+  const oreUniche = useMemo(() => {
+    const set = new Set(classeOrarioSlots.map((s) => s.numeroOra || 0))
+    return [...set].sort((a, b) => a - b)
+  }, [classeOrarioSlots])
+
+  // Summary: ore per percorso per settimana from ricorrenze
+  const orePerPercorsoSettimanali = useMemo(() => {
+    const map = {} // percorsoId -> { titolo, oreSettimanali }
+    for (const key of Object.keys(classeRicorrenze)) {
+      const ric = classeRicorrenze[key]
+      if (!ric?.percorsoId) continue
+      if (!map[ric.percorsoId]) {
+        map[ric.percorsoId] = { titolo: ric.percorsoTitolo, oreSettimanali: 0 }
+      }
+      map[ric.percorsoId].oreSettimanali++
+    }
+    return map
+  }, [classeRicorrenze])
+
   // ── Flat list of all lesson slots (one per actual hour) ──
   // Key format: "yyyy-MM-dd_numeroOra" (e.g. "2026-03-17_1")
   const slots = useMemo(() => {
@@ -313,43 +350,6 @@ export default function ProgrammazionePage() {
     }
     return Object.values(map).sort((a, b) => a.weekStr.localeCompare(b.weekStr))
   }, [slots])
-
-  // Current ricorrenze for selected class
-  const classeRicorrenze = ricorrenze[selectedClasse] || {}
-
-  // Build orario grid for selected class+materia: array of { giorno, numeroOra, oraInizio, oraFine }
-  const classeOrarioSlots = useMemo(() => {
-    if (!selectedClasse) return []
-    return orari
-      .filter((o) => o.classe === selectedClasse && o.materia === selectedMateria && o.giorno !== giornoLibero)
-      .sort((a, b) => a.giorno - b.giorno || (a.numeroOra || 0) - (b.numeroOra || 0))
-  }, [selectedClasse, selectedMateria, orari, giornoLibero])
-
-  // Unique giorni that have slots for this class
-  const giorniConOre = useMemo(() => {
-    const set = new Set(classeOrarioSlots.map((s) => s.giorno))
-    return [...set].sort()
-  }, [classeOrarioSlots])
-
-  // Unique ore (numeroOra) across all giorni for this class
-  const oreUniche = useMemo(() => {
-    const set = new Set(classeOrarioSlots.map((s) => s.numeroOra || 0))
-    return [...set].sort((a, b) => a - b)
-  }, [classeOrarioSlots])
-
-  // Summary: ore per percorso per settimana from ricorrenze
-  const orePerPercorsoSettimanali = useMemo(() => {
-    const map = {} // percorsoId -> { titolo, oreSettimanali }
-    for (const key of Object.keys(classeRicorrenze)) {
-      const ric = classeRicorrenze[key]
-      if (!ric?.percorsoId) continue
-      if (!map[ric.percorsoId]) {
-        map[ric.percorsoId] = { titolo: ric.percorsoTitolo, oreSettimanali: 0 }
-      }
-      map[ric.percorsoId].oreSettimanali++
-    }
-    return map
-  }, [classeRicorrenze])
 
   // Handle ricorrenza change for a slot
   async function handleRicorrenzaChange(giorno, numeroOra, percorsoId) {

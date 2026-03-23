@@ -10,6 +10,7 @@ import {
   onUnita,
   onVacanze,
   onRicorrenze,
+  onDistribuzioni,
   addLezione,
   updateLezione,
   deleteLezione,
@@ -46,6 +47,7 @@ export default function SettimanaPage() {
   const [unitaMap, setUnitaMap] = useState({})
   const [vacanze, setVacanze] = useState([])
   const [ricorrenze, setRicorrenze] = useState({})
+  const [distribuzioni, setDistribuzioni] = useState({})
   const [weekOffset, setWeekOffset] = useState(0)
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState('grid') // 'grid' | 'list'
@@ -91,6 +93,7 @@ export default function SettimanaPage() {
     unsubs.push(onVacanze(annoAttivo, setVacanze))
     unsubs.push(onPercorsi(annoAttivo, setPercorsi))
     unsubs.push(onRicorrenze(setRicorrenze))
+    unsubs.push(onDistribuzioni(setDistribuzioni))
 
     return () => unsubs.forEach((u) => u())
   }, [annoAttivo, weekOffset])
@@ -171,9 +174,18 @@ export default function SettimanaPage() {
         const key = `${dayStr}_${slot.oraInizio}_${slot.classe}`
         if (existingKeys.has(key)) continue
 
+        // Check distribuzioni first (specific unit for this date+slot), then ricorrenze (generic percorso)
+        const classeDist = distribuzioni[slot.classe] || {}
+        const distKey = `${dayStr}_${slot.numeroOra || 0}`
+        const dist = classeDist[distKey]
+
         const classeRic = ricorrenze[slot.classe] || {}
         const ricKey = `${i}-${slot.numeroOra || 0}`
         const ric = classeRic[ricKey]
+
+        // Distribuzioni wins: has both percorsoId and unitaId
+        const percorsoId = dist?.percorsoId || ric?.percorsoId || null
+        const unitaId = dist?.unitaId || null
 
         promises.push(
           addLezione({
@@ -189,7 +201,8 @@ export default function SettimanaPage() {
             stato: STATO_LEZIONE.PIANIFICATA,
             note: '',
             titoloOverride: '',
-            ...(ric?.percorsoId ? { percorsoId: ric.percorsoId } : {}),
+            ...(percorsoId ? { percorsoId } : {}),
+            ...(unitaId ? { unitaId } : {}),
           })
         )
       }
@@ -253,9 +266,16 @@ export default function SettimanaPage() {
             const key = `${dayStr}_${slot.oraInizio}_${slot.classe}`
             if (existingKeysThisWeek.has(key)) continue
 
+            const classeDist = distribuzioni[slot.classe] || {}
+            const distKey = `${dayStr}_${slot.numeroOra || 0}`
+            const dist = classeDist[distKey]
+
             const classeRic = ricorrenze[slot.classe] || {}
             const ricKey = `${i}-${slot.numeroOra || 0}`
             const ric = classeRic[ricKey]
+
+            const percorsoId = dist?.percorsoId || ric?.percorsoId || null
+            const unitaId = dist?.unitaId || null
 
             promises.push(
               addLezione({
@@ -271,7 +291,8 @@ export default function SettimanaPage() {
                 stato: STATO_LEZIONE.PIANIFICATA,
                 note: '',
                 titoloOverride: '',
-                ...(ric?.percorsoId ? { percorsoId: ric.percorsoId } : {}),
+                ...(percorsoId ? { percorsoId } : {}),
+                ...(unitaId ? { unitaId } : {}),
               })
             )
           }

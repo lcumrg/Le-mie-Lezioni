@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 export default function GenerateButton({
   onGenerate,
   onGenerateMultiWeek,
+  onRegenerate,
   generating,
   hasOrari,
   lezioniCount,
@@ -73,6 +74,15 @@ export default function GenerateButton({
             </div>
           )}
         </div>
+      )}
+      {hasOrari && lezioniCount > 0 && onRegenerate && (
+        <button
+          onClick={onRegenerate}
+          disabled={generating}
+          className="px-4 py-2 bg-warn text-canvas text-sm font-medium rounded-sm hover:bg-warn/80 disabled:opacity-50"
+        >
+          {generating ? 'Rigenerazione...' : 'Rigenera'}
+        </button>
       )}
       <button
         onClick={onToggleExtra}

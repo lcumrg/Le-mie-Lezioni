@@ -150,6 +150,85 @@ export default function SettimanaPage() {
     return vacanze.find((v) => dayStr >= v.dataInizio && dayStr <= v.dataFine) || null
   }
 
+  async function handleRegenerate() {
+    if (!annoAttivo || orari.length === 0) return
+    setGenerating(true)
+
+    // Delete all non-extra lessons for this week
+    const toDelete = lezioni.filter((l) => !l.extra)
+    try {
+      await Promise.all(toDelete.map((l) => deleteLezione(l.id)))
+    } catch {
+      toast.error('Errore durante la cancellazione delle lezioni.')
+      setGenerating(false)
+      return
+    }
+
+    // Wait briefly for Firestore snapshot to update, then generate
+    // We call handleGenerate logic inline since lezioni state may not have updated yet
+    const existingExtraKeys = new Set(
+      lezioni.filter((l) => l.extra).map((l) => {
+        const d = l.data instanceof Date ? l.data : l.data?.toDate ? l.data.toDate() : new Date(l.data)
+        return `${format(d, 'yyyy-MM-dd')}_${l.oraInizio}_${l.classe}`
+      })
+    )
+
+    let skippedDays = 0
+    const promises = []
+    for (let i = 0; i < 6; i++) {
+      if (i === giornoLibero) continue
+      const date = addDays(start, i)
+      const dayStr = format(date, 'yyyy-MM-dd')
+      if (isGiornoNonScolastico(dayStr)) { skippedDays++; continue }
+
+      const slotsForDay = orari.filter((o) => o.giorno === i)
+      for (const slot of slotsForDay) {
+        const key = `${dayStr}_${slot.oraInizio}_${slot.classe}`
+        if (existingExtraKeys.has(key)) continue
+
+        const classeDist = distribuzioni[slot.classe] || {}
+        const distKey = `${dayStr}_${slot.numeroOra || 0}`
+        const dist = classeDist[distKey]
+
+        const classeRic = ricorrenze[slot.classe] || {}
+        const ricKey = `${i}-${slot.numeroOra || 0}`
+        const ric = classeRic[ricKey]
+
+        const percorsoId = dist?.percorsoId || ric?.percorsoId || null
+        const unitaId = dist?.unitaId || null
+
+        promises.push(
+          addLezione({
+            annoScolastico: annoAttivo,
+            data: Timestamp.fromDate(startOfDay(date)),
+            giorno: i,
+            numeroOra: slot.numeroOra || null,
+            oraInizio: slot.oraInizio,
+            oraFine: slot.oraFine,
+            classe: slot.classe,
+            materia: slot.materia,
+            ore: slot.ore,
+            stato: STATO_LEZIONE.PIANIFICATA,
+            note: '',
+            titoloOverride: '',
+            ...(percorsoId ? { percorsoId } : {}),
+            ...(unitaId ? { unitaId } : {}),
+          })
+        )
+      }
+    }
+
+    try {
+      await Promise.all(promises)
+      const deleted = toDelete.length
+      const created = promises.length
+      toast.success(`${deleted} lezioni eliminate, ${created} rigenerate dalla timeline`)
+    } catch {
+      toast.error('Errore durante la rigenerazione delle lezioni.')
+    }
+    setGenerating(false)
+  }
+
   async function handleGenerate() {
     if (!annoAttivo || orari.length === 0) return
     setGenerating(true)
@@ -563,6 +642,7 @@ export default function SettimanaPage() {
           <GenerateButton
             onGenerate={handleGenerate}
             onGenerateMultiWeek={handleGenerateMultiWeek}
+            onRegenerate={handleRegenerate}
             generating={generating}
             hasOrari={hasOrari}
             lezioniCount={lezioni.length}
@@ -593,7 +673,7 @@ export default function SettimanaPage() {
       {/* -- Grid view -- */}
       {viewMode === 'grid' && (
         <>
-          {/* Generate button for grid mode */}
+          {/* Generate / Regenerate button for grid mode */}
           {hasOreConfig && hasOrari && lezioni.length === 0 && (
             <div className="mb-4 px-4 py-3 bg-badge-p border border-link/30 rounded-sm flex items-center justify-between gap-3">
               <p className="text-sm text-link">
@@ -607,6 +687,17 @@ export default function SettimanaPage() {
                   Genera da orario
                 </button>
               )}
+            </div>
+          )}
+          {hasOreConfig && hasOrari && lezioni.length > 0 && (
+            <div className="mb-4 flex justify-end">
+              <button
+                onClick={handleRegenerate}
+                disabled={generating}
+                className="px-4 py-1.5 bg-warn text-canvas text-sm font-medium rounded-sm hover:bg-warn/80 disabled:opacity-50"
+              >
+                {generating ? 'Rigenerazione...' : 'Rigenera'}
+              </button>
             </div>
           )}
 

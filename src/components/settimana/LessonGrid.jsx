@@ -48,11 +48,14 @@ export default function LessonGrid({
   percorsi,
   giornoLibero,
   onOpenPercorso,
+  onSwapLezioni,
 }) {
   const [selectedKey, setSelectedKey] = useState(null)
   const [editNote, setEditNote] = useState('')
   const [editTitolo, setEditTitolo] = useState('')
   const [saveStatus, setSaveStatus] = useState(null) // null | 'saving' | 'saved'
+  const [dragSourceKey, setDragSourceKey] = useState(null)
+  const [dragOverKey, setDragOverKey] = useState(null)
   const gridRef = useRef(null)
   const noteDebounceRef = useRef(null)
   const titoloDebounceRef = useRef(null)
@@ -276,6 +279,45 @@ export default function LessonGrid({
     quickSaveWithIndicator(selectedLez.id, updates)
   }
 
+  // Drag & drop handlers for swapping lessons
+  const dragSourceLez = dragSourceKey ? lessonGrid[dragSourceKey] : null
+
+  function handleDragStart(key, lez) {
+    if (!lez) return
+    setDragSourceKey(key)
+  }
+
+  function handleDragOver(e, key) {
+    if (!dragSourceKey || dragSourceKey === key) return
+    const targetLez = lessonGrid[key]
+    if (!targetLez) return
+    // Only allow drop on same classe
+    if (dragSourceLez && targetLez.classe !== dragSourceLez.classe) return
+    e.preventDefault()
+    setDragOverKey(key)
+  }
+
+  function handleDragLeave() {
+    setDragOverKey(null)
+  }
+
+  function handleDrop(e, key) {
+    e.preventDefault()
+    if (!dragSourceKey || dragSourceKey === key) return
+    const sourceLez = lessonGrid[dragSourceKey]
+    const targetLez = lessonGrid[key]
+    if (sourceLez && targetLez && sourceLez.classe === targetLez.classe && onSwapLezioni) {
+      onSwapLezioni(sourceLez, targetLez)
+    }
+    setDragSourceKey(null)
+    setDragOverKey(null)
+  }
+
+  function handleDragEnd() {
+    setDragSourceKey(null)
+    setDragOverKey(null)
+  }
+
   function renderCell(lez) {
     const percorso = lez.percorsoId ? percorsoMap[lez.percorsoId] : null
     const unita = lez.unitaId ? unitaMap[lez.unitaId] : null
@@ -373,9 +415,19 @@ export default function LessonGrid({
                     const today = isToday(day.date)
                     const isSelected = selectedKey === key
 
+                    const isDragSource = dragSourceKey === key
+                    const isDragOver = dragOverKey === key
+                    const canDrop = isDragOver && dragSourceLez && lez && dragSourceLez.classe === lez.classe
+
                     return (
                       <td
                         key={day.index}
+                        draggable={!!lez}
+                        onDragStart={() => handleDragStart(key, lez)}
+                        onDragOver={(e) => handleDragOver(e, key)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, key)}
+                        onDragEnd={handleDragEnd}
                         onClick={() => handleCellClick(day.index, ora.numero)}
                         className={`border-b border-r border-edge last:border-r-0 p-0.5 align-top cursor-pointer transition-shadow ${
                           day.vacanza
@@ -384,11 +436,15 @@ export default function LessonGrid({
                               ? 'bg-badge-s/20'
                               : ''
                         } ${
-                          isSelected
-                            ? 'ring-2 ring-link ring-inset'
-                            : lez
-                              ? 'hover:ring-2 hover:ring-link/40 hover:ring-inset'
-                              : 'hover:bg-overlay/50'
+                          isDragSource
+                            ? 'opacity-40'
+                            : canDrop
+                              ? 'ring-2 ring-link/60 ring-inset bg-badge-p/30'
+                              : isSelected
+                                ? 'ring-2 ring-link ring-inset'
+                                : lez
+                                  ? 'hover:ring-2 hover:ring-link/40 hover:ring-inset'
+                                  : 'hover:bg-overlay/50'
                         }`}
                         style={{ height: '4.5rem' }}
                       >
@@ -410,7 +466,7 @@ export default function LessonGrid({
               {giornoLibero !== null && (
                 <span>{GIORNI_LABEL[giornoLibero]}: giorno libero · </span>
               )}
-              Frecce: naviga · Tab: prossima · S/P/X: stato · Esc: chiudi
+              Trascina per scambiare (stessa classe) · Frecce: naviga · Tab: prossima · S/P/X: stato · Esc: chiudi
             </span>
           }
         />

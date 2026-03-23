@@ -14,6 +14,7 @@ import {
   addLezione,
   updateLezione,
   deleteLezione,
+  setDistribuzioniClasse,
 } from '../lib/firestore'
 import { getWeekRange } from '../lib/settimane'
 import {
@@ -419,6 +420,85 @@ export default function SettimanaPage() {
     }
   }
 
+  async function handleSwapLezioni(lezA, lezB) {
+    // Swap curriculum fields between two lessons of the same class
+    if (!lezA || !lezB || lezA.id === lezB.id) return
+    if (lezA.classe !== lezB.classe) {
+      toast.error('Puoi scambiare solo lezioni della stessa classe')
+      return
+    }
+
+    const fieldsA = { percorsoId: lezA.percorsoId || null, unitaId: lezA.unitaId || null, titoloOverride: lezA.titoloOverride || '' }
+    const fieldsB = { percorsoId: lezB.percorsoId || null, unitaId: lezB.unitaId || null, titoloOverride: lezB.titoloOverride || '' }
+
+    try {
+      // Swap lesson fields in Firestore
+      await Promise.all([
+        updateLezione(lezA.id, fieldsB),
+        updateLezione(lezB.id, fieldsA),
+      ])
+
+      // Update distribuzioni for both slots
+      const classe = lezA.classe
+      const classeDist = { ...(distribuzioni[classe] || {}) }
+
+      function dateStr(lez) {
+        const d = lez.data instanceof Date ? lez.data : lez.data?.toDate ? lez.data.toDate() : new Date(lez.data)
+        return format(d, 'yyyy-MM-dd')
+      }
+
+      const keyA = `${dateStr(lezA)}_${lezA.numeroOra || 0}`
+      const keyB = `${dateStr(lezB)}_${lezB.numeroOra || 0}`
+
+      const distA = classeDist[keyA]
+      const distB = classeDist[keyB]
+
+      // Swap or set/delete distribuzioni entries
+      if (fieldsA.percorsoId) {
+        const percorso = percorsoMap[fieldsA.percorsoId]
+        const unita = fieldsA.unitaId ? unitaMap[fieldsA.unitaId] : null
+        classeDist[keyB] = {
+          percorsoId: fieldsA.percorsoId,
+          percorsoTitolo: percorso?.titolo || '',
+          ...(fieldsA.unitaId ? { unitaId: fieldsA.unitaId, unitaTitolo: unita?.titolo || '' } : {}),
+        }
+      } else {
+        delete classeDist[keyB]
+      }
+
+      if (fieldsB.percorsoId) {
+        const percorso = percorsoMap[fieldsB.percorsoId]
+        const unita = fieldsB.unitaId ? unitaMap[fieldsB.unitaId] : null
+        classeDist[keyA] = {
+          percorsoId: fieldsB.percorsoId,
+          percorsoTitolo: percorso?.titolo || '',
+          ...(fieldsB.unitaId ? { unitaId: fieldsB.unitaId, unitaTitolo: unita?.titolo || '' } : {}),
+        }
+      } else {
+        delete classeDist[keyA]
+      }
+
+      await setDistribuzioniClasse(classe, classeDist)
+
+      toast.action(`Lezioni ${lezA.classe} scambiate`, {
+        label: 'Annulla',
+        onClick: async () => {
+          await Promise.all([
+            updateLezione(lezA.id, fieldsA),
+            updateLezione(lezB.id, fieldsB),
+          ])
+          // Restore distribuzioni
+          const restoreDist = { ...(distribuzioni[classe] || {}) }
+          if (distA) restoreDist[keyA] = distA; else delete restoreDist[keyA]
+          if (distB) restoreDist[keyB] = distB; else delete restoreDist[keyB]
+          await setDistribuzioniClasse(classe, restoreDist)
+        },
+      })
+    } catch {
+      toast.error('Errore durante lo scambio delle lezioni.')
+    }
+  }
+
   async function handleDeleteLezione(id) {
     const lez = lezioni.find((l) => l.id === id)
     if (!lez) return
@@ -715,6 +795,7 @@ export default function SettimanaPage() {
               percorsi={percorsi}
               giornoLibero={giornoLibero}
               onOpenPercorso={(p) => setSlidePanelPercorso(p)}
+              onSwapLezioni={handleSwapLezioni}
             />
           ) : (
             <div className="mb-6 p-4 bg-badge-warn border border-warn/30 rounded-sm">

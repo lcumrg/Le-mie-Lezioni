@@ -154,6 +154,18 @@ export function onLezioniSettimana(annoScolastico, inizioSettimana, fineSettiman
   })
 }
 
+/** Fetch lezioni in un intervallo di date (one-shot, per dedup nella generazione multi-settimana) */
+export async function getLezioniRange(annoScolastico, inizio, fine) {
+  const q = query(
+    lezioniRef,
+    where('annoScolastico', '==', annoScolastico),
+    where('data', '>=', inizio),
+    where('data', '<=', fine)
+  )
+  const snap = await getDocs(q)
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
 export async function addLezione(data) {
   return addDoc(lezioniRef, data)
 }

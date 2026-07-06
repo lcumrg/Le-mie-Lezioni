@@ -4,6 +4,7 @@ import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
 import {
   onLezioniSettimana,
+  getLezioniRange,
   onAssegnazioni,
   onOrari,
   onPercorsi,
@@ -223,7 +224,9 @@ export default function SettimanaPage() {
       await Promise.all(promises)
       const deleted = toDelete.length
       const created = promises.length
-      toast.success(`${deleted} lezioni eliminate, ${created} rigenerate dalla timeline`)
+      const parts = [`${deleted} lezioni eliminate, ${created} rigenerate dalla timeline`]
+      if (skippedDays > 0) parts.push(`${skippedDays} giorn${skippedDays === 1 ? 'o' : 'i'} non scolastic${skippedDays === 1 ? 'o' : 'i'}`)
+      toast.success(parts.join(' — '))
     } catch {
       toast.error('Errore durante la rigenerazione delle lezioni.')
     }
@@ -314,24 +317,20 @@ export default function SettimanaPage() {
     let totalSkipped = 0
 
     try {
+      // Dedup contro il DB sull'intero intervallo: lo stato locale contiene
+      // solo la settimana visualizzata, non le settimane successive
+      const rangeEnd = addDays(start, totalWeeks * 7 - 1)
+      const esistenti = await getLezioniRange(annoAttivo, start, rangeEnd)
+      const existingKeys = new Set(
+        esistenti.map((l) => {
+          const d = l.data instanceof Date ? l.data : l.data?.toDate ? l.data.toDate() : new Date(l.data)
+          return `${format(d, 'yyyy-MM-dd')}_${l.oraInizio}_${l.classe}`
+        })
+      )
+
       for (let w = 0; w < totalWeeks; w++) {
         const weekStart = addDays(start, w * 7)
         if (fineScuola && isAfter(weekStart, fineScuola)) break
-
-        // Fetch existing lezioni for this week
-        const weekEnd = addDays(weekStart, 6)
-        // We'll compute keys from orari to avoid duplicates
-        const existingKeysThisWeek = new Set(
-          lezioni
-            .filter((l) => {
-              const d = l.data instanceof Date ? l.data : l.data?.toDate ? l.data.toDate() : new Date(l.data)
-              return d >= weekStart && d <= weekEnd
-            })
-            .map((l) => {
-              const d = l.data instanceof Date ? l.data : l.data?.toDate ? l.data.toDate() : new Date(l.data)
-              return `${format(d, 'yyyy-MM-dd')}_${l.oraInizio}_${l.classe}`
-            })
-        )
 
         const promises = []
         for (let i = 0; i < 6; i++) {
@@ -344,7 +343,8 @@ export default function SettimanaPage() {
           const slotsForDay = orari.filter((o) => o.giorno === i)
           for (const slot of slotsForDay) {
             const key = `${dayStr}_${slot.oraInizio}_${slot.classe}`
-            if (existingKeysThisWeek.has(key)) continue
+            if (existingKeys.has(key)) continue
+            existingKeys.add(key)
 
             const classeDist = distribuzioni[slot.classe] || {}
             const distKey = `${dayStr}_${slot.numeroOra || 0}`
@@ -384,7 +384,9 @@ export default function SettimanaPage() {
 
       if (totalCreated > 0) {
         const label = numWeeks === 'end' ? 'fino a fine scuola' : `${numWeeks} settimane`
-        toast.success(`${totalCreated} lezioni generate (${label})`)
+        const parts = [`${totalCreated} lezioni generate (${label})`]
+        if (totalSkipped > 0) parts.push(`${totalSkipped} giorn${totalSkipped === 1 ? 'o' : 'i'} non scolastic${totalSkipped === 1 ? 'o' : 'i'}`)
+        toast.success(parts.join(' — '))
       } else {
         toast.info('Nessuna nuova lezione da generare.')
       }

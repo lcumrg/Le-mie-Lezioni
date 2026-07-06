@@ -19,11 +19,16 @@ import {
 } from '../lib/firestore'
 import { getWeekRange } from '../lib/settimane'
 import {
+  costruisciLezioniDaOrario,
+  chiaveLezione,
+  oreDisponibiliPerAssegnazione,
+} from '../lib/calendario'
+import {
   STATO_LEZIONE,
   GIORNI_LABEL,
   GIORNI_SHORT,
 } from '../lib/costanti'
-import { format, addDays, parseISO, startOfWeek, startOfDay, isBefore, isAfter } from 'date-fns'
+import { format, addDays, parseISO, isBefore } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Timestamp } from 'firebase/firestore'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -147,8 +152,22 @@ export default function SettimanaPage() {
     }
   }
 
-  function isGiornoNonScolastico(dayStr) {
-    return vacanze.find((v) => dayStr >= v.dataInizio && dayStr <= v.dataFine) || null
+  // Chiavi di dedup delle lezioni in stato (settimana visualizzata)
+  function chiaviLezioni(list) {
+    return new Set(
+      list.map((l) => {
+        const d = l.data instanceof Date ? l.data : l.data?.toDate ? l.data.toDate() : new Date(l.data)
+        return chiaveLezione(format(d, 'yyyy-MM-dd'), l.oraInizio, l.classe)
+      })
+    )
+  }
+
+  async function salvaLezioni(nuove) {
+    return Promise.all(nuove.map((l) => addLezione({ ...l, data: Timestamp.fromDate(l.data) })))
+  }
+
+  function labelGiorniSaltati(n) {
+    return `${n} giorn${n === 1 ? 'o' : 'i'} non scolastic${n === 1 ? 'o' : 'i'}`
   }
 
   async function handleRegenerate() {
@@ -165,66 +184,23 @@ export default function SettimanaPage() {
       return
     }
 
-    // Wait briefly for Firestore snapshot to update, then generate
-    // We call handleGenerate logic inline since lezioni state may not have updated yet
-    const existingExtraKeys = new Set(
-      lezioni.filter((l) => l.extra).map((l) => {
-        const d = l.data instanceof Date ? l.data : l.data?.toDate ? l.data.toDate() : new Date(l.data)
-        return `${format(d, 'yyyy-MM-dd')}_${l.oraInizio}_${l.classe}`
-      })
-    )
-
-    let skippedDays = 0
-    const promises = []
-    for (let i = 0; i < 6; i++) {
-      if (i === giornoLibero) continue
-      const date = addDays(start, i)
-      const dayStr = format(date, 'yyyy-MM-dd')
-      if (isGiornoNonScolastico(dayStr)) { skippedDays++; continue }
-
-      const slotsForDay = orari.filter((o) => o.giorno === i)
-      for (const slot of slotsForDay) {
-        const key = `${dayStr}_${slot.oraInizio}_${slot.classe}`
-        if (existingExtraKeys.has(key)) continue
-
-        const classeDist = distribuzioni[slot.classe] || {}
-        const distKey = `${dayStr}_${slot.numeroOra || 0}`
-        const dist = classeDist[distKey]
-
-        const classeRic = ricorrenze[slot.classe] || {}
-        const ricKey = `${i}-${slot.numeroOra || 0}`
-        const ric = classeRic[ricKey]
-
-        const percorsoId = dist?.percorsoId || ric?.percorsoId || null
-        const unitaId = dist?.unitaId || null
-
-        promises.push(
-          addLezione({
-            annoScolastico: annoAttivo,
-            data: Timestamp.fromDate(startOfDay(date)),
-            giorno: i,
-            numeroOra: slot.numeroOra || null,
-            oraInizio: slot.oraInizio,
-            oraFine: slot.oraFine,
-            classe: slot.classe,
-            materia: slot.materia,
-            ore: slot.ore,
-            stato: STATO_LEZIONE.PIANIFICATA,
-            note: '',
-            titoloOverride: '',
-            ...(percorsoId ? { percorsoId } : {}),
-            ...(unitaId ? { unitaId } : {}),
-          })
-        )
-      }
-    }
+    // Le lezioni extra sopravvivono: le loro chiavi bloccano la rigenerazione dello slot
+    const { lezioni: nuove, giorniSaltati } = costruisciLezioniDaOrario({
+      da: start,
+      a: addDays(start, 5),
+      annoScolastico: annoAttivo,
+      orari,
+      vacanze,
+      giornoLibero,
+      ricorrenze,
+      distribuzioni,
+      existingKeys: chiaviLezioni(lezioni.filter((l) => l.extra)),
+    })
 
     try {
-      await Promise.all(promises)
-      const deleted = toDelete.length
-      const created = promises.length
-      const parts = [`${deleted} lezioni eliminate, ${created} rigenerate dalla timeline`]
-      if (skippedDays > 0) parts.push(`${skippedDays} giorn${skippedDays === 1 ? 'o' : 'i'} non scolastic${skippedDays === 1 ? 'o' : 'i'}`)
+      await salvaLezioni(nuove)
+      const parts = [`${toDelete.length} lezioni eliminate, ${nuove.length} rigenerate dalla timeline`]
+      if (giorniSaltati > 0) parts.push(labelGiorniSaltati(giorniSaltati))
       toast.success(parts.join(' — '))
     } catch {
       toast.error('Errore durante la rigenerazione delle lezioni.')
@@ -236,68 +212,26 @@ export default function SettimanaPage() {
     if (!annoAttivo || orari.length === 0) return
     setGenerating(true)
 
-    const existingKeys = new Set(
-      lezioni.map((l) => {
-        const d = l.data instanceof Date ? l.data : l.data?.toDate ? l.data.toDate() : new Date(l.data)
-        return `${format(d, 'yyyy-MM-dd')}_${l.oraInizio}_${l.classe}`
-      })
-    )
-
-    let skippedDays = 0
-    const promises = []
-    for (let i = 0; i < 6; i++) {
-      if (i === giornoLibero) continue
-      const date = addDays(start, i)
-      const dayStr = format(date, 'yyyy-MM-dd')
-      if (isGiornoNonScolastico(dayStr)) { skippedDays++; continue }
-
-      const slotsForDay = orari.filter((o) => o.giorno === i)
-      for (const slot of slotsForDay) {
-        const key = `${dayStr}_${slot.oraInizio}_${slot.classe}`
-        if (existingKeys.has(key)) continue
-
-        // Check distribuzioni first (specific unit for this date+slot), then ricorrenze (generic percorso)
-        const classeDist = distribuzioni[slot.classe] || {}
-        const distKey = `${dayStr}_${slot.numeroOra || 0}`
-        const dist = classeDist[distKey]
-
-        const classeRic = ricorrenze[slot.classe] || {}
-        const ricKey = `${i}-${slot.numeroOra || 0}`
-        const ric = classeRic[ricKey]
-
-        // Distribuzioni wins: has both percorsoId and unitaId
-        const percorsoId = dist?.percorsoId || ric?.percorsoId || null
-        const unitaId = dist?.unitaId || null
-
-        promises.push(
-          addLezione({
-            annoScolastico: annoAttivo,
-            data: Timestamp.fromDate(startOfDay(date)),
-            giorno: i,
-            numeroOra: slot.numeroOra || null,
-            oraInizio: slot.oraInizio,
-            oraFine: slot.oraFine,
-            classe: slot.classe,
-            materia: slot.materia,
-            ore: slot.ore,
-            stato: STATO_LEZIONE.PIANIFICATA,
-            note: '',
-            titoloOverride: '',
-            ...(percorsoId ? { percorsoId } : {}),
-            ...(unitaId ? { unitaId } : {}),
-          })
-        )
-      }
-    }
+    const { lezioni: nuove, giorniSaltati } = costruisciLezioniDaOrario({
+      da: start,
+      a: addDays(start, 5),
+      annoScolastico: annoAttivo,
+      orari,
+      vacanze,
+      giornoLibero,
+      ricorrenze,
+      distribuzioni,
+      existingKeys: chiaviLezioni(lezioni),
+    })
 
     try {
-      await Promise.all(promises)
-      if (promises.length > 0) {
-        const parts = [`${promises.length} lezioni generate`]
-        if (skippedDays > 0) parts.push(`${skippedDays} giorn${skippedDays === 1 ? 'o saltato' : 'i saltati'}`)
+      await salvaLezioni(nuove)
+      if (nuove.length > 0) {
+        const parts = [`${nuove.length} lezioni generate`]
+        if (giorniSaltati > 0) parts.push(labelGiorniSaltati(giorniSaltati))
         toast.success(parts.join(' — '))
-      } else if (skippedDays > 0) {
-        toast.info(`Nessuna lezione generata — ${skippedDays} giorn${skippedDays === 1 ? 'o' : 'i'} non scolastic${skippedDays === 1 ? 'o' : 'i'}`)
+      } else if (giorniSaltati > 0) {
+        toast.info(`Nessuna lezione generata — ${labelGiorniSaltati(giorniSaltati)}`)
       }
     } catch {
       toast.error('Errore durante la generazione delle lezioni.')
@@ -311,79 +245,32 @@ export default function SettimanaPage() {
 
     const fineScuola = dataFineScuola ? parseISO(dataFineScuola) : null
     const totalWeeks = numWeeks === 'end' ? 52 : numWeeks
-    let totalCreated = 0
-    let totalSkipped = 0
+    let rangeEnd = addDays(start, totalWeeks * 7 - 1)
+    if (fineScuola && isBefore(fineScuola, rangeEnd)) rangeEnd = fineScuola
 
     try {
       // Dedup contro il DB sull'intero intervallo: lo stato locale contiene
       // solo la settimana visualizzata, non le settimane successive
-      const rangeEnd = addDays(start, totalWeeks * 7 - 1)
       const esistenti = await getLezioniRange(annoAttivo, start, rangeEnd)
-      const existingKeys = new Set(
-        esistenti.map((l) => {
-          const d = l.data instanceof Date ? l.data : l.data?.toDate ? l.data.toDate() : new Date(l.data)
-          return `${format(d, 'yyyy-MM-dd')}_${l.oraInizio}_${l.classe}`
-        })
-      )
 
-      for (let w = 0; w < totalWeeks; w++) {
-        const weekStart = addDays(start, w * 7)
-        if (fineScuola && isAfter(weekStart, fineScuola)) break
+      const { lezioni: nuove, giorniSaltati } = costruisciLezioniDaOrario({
+        da: start,
+        a: rangeEnd,
+        annoScolastico: annoAttivo,
+        orari,
+        vacanze,
+        giornoLibero,
+        ricorrenze,
+        distribuzioni,
+        existingKeys: chiaviLezioni(esistenti),
+      })
 
-        const promises = []
-        for (let i = 0; i < 6; i++) {
-          if (i === giornoLibero) continue
-          const date = addDays(weekStart, i)
-          if (fineScuola && isAfter(date, fineScuola)) continue
-          const dayStr = format(date, 'yyyy-MM-dd')
-          if (isGiornoNonScolastico(dayStr)) { totalSkipped++; continue }
+      await salvaLezioni(nuove)
 
-          const slotsForDay = orari.filter((o) => o.giorno === i)
-          for (const slot of slotsForDay) {
-            const key = `${dayStr}_${slot.oraInizio}_${slot.classe}`
-            if (existingKeys.has(key)) continue
-            existingKeys.add(key)
-
-            const classeDist = distribuzioni[slot.classe] || {}
-            const distKey = `${dayStr}_${slot.numeroOra || 0}`
-            const dist = classeDist[distKey]
-
-            const classeRic = ricorrenze[slot.classe] || {}
-            const ricKey = `${i}-${slot.numeroOra || 0}`
-            const ric = classeRic[ricKey]
-
-            const percorsoId = dist?.percorsoId || ric?.percorsoId || null
-            const unitaId = dist?.unitaId || null
-
-            promises.push(
-              addLezione({
-                annoScolastico: annoAttivo,
-                data: Timestamp.fromDate(startOfDay(date)),
-                giorno: i,
-                numeroOra: slot.numeroOra || null,
-                oraInizio: slot.oraInizio,
-                oraFine: slot.oraFine,
-                classe: slot.classe,
-                materia: slot.materia,
-                ore: slot.ore,
-                stato: STATO_LEZIONE.PIANIFICATA,
-                note: '',
-                titoloOverride: '',
-                ...(percorsoId ? { percorsoId } : {}),
-                ...(unitaId ? { unitaId } : {}),
-              })
-            )
-          }
-        }
-
-        await Promise.all(promises)
-        totalCreated += promises.length
-      }
-
-      if (totalCreated > 0) {
+      if (nuove.length > 0) {
         const label = numWeeks === 'end' ? 'fino a fine scuola' : `${numWeeks} settimane`
-        const parts = [`${totalCreated} lezioni generate (${label})`]
-        if (totalSkipped > 0) parts.push(`${totalSkipped} giorn${totalSkipped === 1 ? 'o' : 'i'} non scolastic${totalSkipped === 1 ? 'o' : 'i'}`)
+        const parts = [`${nuove.length} lezioni generate (${label})`]
+        if (giorniSaltati > 0) parts.push(labelGiorniSaltati(giorniSaltati))
         toast.success(parts.join(' — '))
       } else {
         toast.info('Nessuna nuova lezione da generare.')
@@ -616,37 +503,19 @@ export default function SettimanaPage() {
     return map
   }, [percorsi])
 
-  // Remaining hours calculation
+  // Remaining hours calculation — da oggi (i giorni già trascorsi non contano)
   const oreRimanentiPerClasse = useMemo(() => {
     if (!dataFineScuola || orari.length === 0) return null
     const fineScuola = parseISO(dataFineScuola)
     const oggi = new Date()
     if (fineScuola <= oggi) return null
 
-    const orePerClasse = {}
-    let current = startOfWeek(oggi, { weekStartsOn: 1 })
-
-    while (isBefore(current, fineScuola)) {
-      for (let d = 0; d < 6; d++) {
-        if (d === giornoLibero) continue
-        const day = addDays(current, d)
-        if (isAfter(day, fineScuola)) continue
-
-        const isVacDay = vacanze.some((v) => {
-          const vStart = parseISO(v.dataInizio)
-          const vEnd = parseISO(v.dataFine)
-          return !isBefore(day, vStart) && !isAfter(day, vEnd)
-        })
-        if (isVacDay) continue
-
-        const dayOrari = orari.filter((o) => o.giorno === d)
-        for (const o of dayOrari) {
-          const key = `${o.classe}|${o.materia}`
-          orePerClasse[key] = (orePerClasse[key] || 0) + (o.ore || 1)
-        }
-      }
-      current = addDays(current, 7)
-    }
+    const orePerClasse = oreDisponibiliPerAssegnazione(orari, {
+      da: oggi,
+      a: fineScuola,
+      giornoLibero,
+      vacanze,
+    })
 
     return Object.entries(orePerClasse).map(([key, totaleOre]) => {
       const [classe, materia] = key.split('|')

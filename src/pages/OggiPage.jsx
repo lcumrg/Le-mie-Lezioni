@@ -9,12 +9,14 @@ import {
   onUnita,
   onVacanze,
   onRicorrenze,
+  onDistribuzioni,
   onAssegnazioni,
   addLezione,
   updateLezione,
   updateUnita,
 } from '../lib/firestore'
 import { getDayRange } from '../lib/settimane'
+import { costruisciLezioniDaOrario, chiaveLezione, oreDisponibili } from '../lib/calendario'
 import {
   STATO_LEZIONE,
   STATO_LEZIONE_SHORT,
@@ -24,7 +26,7 @@ import {
   GIORNI_LABEL,
   TIPO_VACANZA_LABEL,
 } from '../lib/costanti'
-import { format, startOfDay, addDays, parseISO, startOfWeek, endOfWeek, isBefore, isAfter, differenceInWeeks } from 'date-fns'
+import { format, addDays, parseISO, startOfWeek, endOfWeek, differenceInWeeks } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Timestamp } from 'firebase/firestore'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -50,6 +52,7 @@ export default function OggiPage() {
   const [unitaMap, setUnitaMap] = useState({})
   const [vacanze, setVacanze] = useState([])
   const [ricorrenze, setRicorrenze] = useState({})
+  const [distribuzioni, setDistribuzioni] = useState({})
   const [dayOffset, setDayOffset] = useState(0)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
@@ -89,6 +92,7 @@ export default function OggiPage() {
     unsubs.push(onPercorsi(annoAttivo, setPercorsi))
     unsubs.push(onVacanze(annoAttivo, setVacanze))
     unsubs.push(onRicorrenze(setRicorrenze))
+    unsubs.push(onDistribuzioni(setDistribuzioni))
 
     return () => unsubs.forEach((u) => u())
   }, [annoAttivo, dayOffset])
@@ -212,48 +216,28 @@ export default function OggiPage() {
     }
   }
 
-  // Generate lessons for this day only
+  // Generate lessons for this day only — stessa logica della Settimana:
+  // le distribuzioni della timeline (percorso + unità) vincono sulle ricorrenze
   async function handleGenerate() {
     if (!annoAttivo || slotsOggi.length === 0) return
     setGenerating(true)
 
-    const existingKeys = new Set(
-      lezioni.map((l) => `${dayStr}_${l.oraInizio}_${l.classe}`)
-    )
-
-    const promises = []
-    for (const slot of slotsOggi) {
-      const key = `${dayStr}_${slot.oraInizio}_${slot.classe}`
-      if (existingKeys.has(key)) continue
-
-      // Check ricorrenza
-      const classeRic = ricorrenze[slot.classe] || {}
-      const ricKey = `${dayIndex}-${slot.numeroOra || 0}`
-      const ric = classeRic[ricKey]
-
-      promises.push(
-        addLezione({
-          annoScolastico: annoAttivo,
-          data: Timestamp.fromDate(startOfDay(dayDate)),
-          giorno: dayIndex,
-          numeroOra: slot.numeroOra || null,
-          oraInizio: slot.oraInizio,
-          oraFine: slot.oraFine,
-          classe: slot.classe,
-          materia: slot.materia,
-          ore: slot.ore,
-          stato: STATO_LEZIONE.PIANIFICATA,
-          note: '',
-          titoloOverride: '',
-          ...(ric?.percorsoId ? { percorsoId: ric.percorsoId } : {}),
-        })
-      )
-    }
+    const { lezioni: nuove } = costruisciLezioniDaOrario({
+      da: dayDate,
+      a: dayDate,
+      annoScolastico: annoAttivo,
+      orari,
+      vacanze,
+      giornoLibero,
+      ricorrenze,
+      distribuzioni,
+      existingKeys: new Set(lezioni.map((l) => chiaveLezione(dayStr, l.oraInizio, l.classe))),
+    })
 
     try {
-      await Promise.all(promises)
-      if (promises.length > 0) {
-        toast.success(`${promises.length} lezioni generate`)
+      await Promise.all(nuove.map((l) => addLezione({ ...l, data: Timestamp.fromDate(l.data) })))
+      if (nuove.length > 0) {
+        toast.success(`${nuove.length} lezioni generate`)
       }
     } catch {
       toast.error('Errore durante la generazione delle lezioni.')
@@ -320,24 +304,17 @@ export default function OggiPage() {
     ? Math.max(0, differenceInWeeks(parseISO(dataFineScuola), new Date()))
     : null
 
+  // Ore rimaste da oggi alla fine scuola (stessa logica di Settimana/Programmazione)
   function computeOreRimaste(classe, materia) {
     if (!dataFineScuola) return 0
-    const fineScuola = parseISO(dataFineScuola)
-    const oggi = new Date()
-    let current = startOfWeek(oggi, { weekStartsOn: 1 })
-    let ore = 0
-    while (isBefore(current, fineScuola)) {
-      for (let d = 0; d < 6; d++) {
-        if (d === giornoLibero) continue
-        const day = addDays(current, d)
-        if (isAfter(day, fineScuola)) continue
-        const isVacDay = vacanze.some((v) => !isBefore(day, parseISO(v.dataInizio)) && !isAfter(day, parseISO(v.dataFine)))
-        if (isVacDay) continue
-        ore += orari.filter((o) => o.giorno === d && o.classe === classe && o.materia === materia).length
-      }
-      current = addDays(current, 7)
-    }
-    return ore
+    return oreDisponibili(orari, {
+      da: new Date(),
+      a: parseISO(dataFineScuola),
+      giornoLibero,
+      vacanze,
+      classe,
+      materia,
+    })
   }
 
   const fineAnnoRows = assegnazioni

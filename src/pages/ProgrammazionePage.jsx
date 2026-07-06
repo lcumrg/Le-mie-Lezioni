@@ -14,15 +14,8 @@ import {
   onRicorrenze,
   setRicorrenzeClasse,
 } from '../lib/firestore'
-import {
-  format,
-  addDays,
-  parseISO,
-  startOfWeek,
-  isBefore,
-  isAfter,
-  isWithinInterval,
-} from 'date-fns'
+import { format, addDays, parseISO, startOfWeek } from 'date-fns'
+import { settimaneScolastiche, oreDisponibili, giornoIndex, toDayStr } from '../lib/calendario'
 import { it } from 'date-fns/locale'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import SlidePanel from '../components/common/SlidePanel'
@@ -194,76 +187,47 @@ export default function ProgrammazionePage() {
   }, [classeLezioni, showConsuntivo])
 
   // ── Generate weeks from today to end of school ──
+  // La struttura settimane viene da lib/calendario (ultima settimana troncata
+  // alla fine scuola); le ore per settimana sono della classe+materia selezionata
   const weeks = useMemo(() => {
     if (!dataFineScuola || !selectedClasse) return []
-    const fineScuola = parseISO(dataFineScuola)
-    const oggi = new Date()
-    let current = startOfWeek(oggi, { weekStartsOn: 1 })
-    const result = []
-
-    while (isBefore(current, fineScuola) || format(current, 'yyyy-MM-dd') === format(startOfWeek(fineScuola, { weekStartsOn: 1 }), 'yyyy-MM-dd')) {
-      const weekEnd = addDays(current, 5) // Saturday
-      const startStr = format(current, 'yyyy-MM-dd')
-
-      // Count available hours for this class this week
-      let oreDisponibili = 0
-      let vacanzaGiorni = 0
-      let vacanzaNome = null
-
-      for (let d = 0; d < 6; d++) {
-        const day = addDays(current, d)
-        if (d === giornoLibero) continue
-
-        // Check if this day is a vacation/chiusura/assenza
-        const isVacDay = vacanze.some((v) => {
-          const vStart = parseISO(v.dataInizio)
-          const vEnd = parseISO(v.dataFine)
-          return (
-            (isWithinInterval(day, { start: vStart, end: vEnd }) ||
-             format(day, 'yyyy-MM-dd') === v.dataInizio ||
-             format(day, 'yyyy-MM-dd') === v.dataFine) &&
-            !isBefore(day, vStart) &&
-            !isAfter(day, vEnd)
-          )
-        })
-
-        if (isVacDay) {
-          vacanzaGiorni++
-          if (!vacanzaNome) {
-            const v = vacanze.find((v) => {
-              const vStart = parseISO(v.dataInizio)
-              const vEnd = parseISO(v.dataFine)
-              return !isBefore(day, vStart) && !isAfter(day, vEnd)
-            })
-            if (v) vacanzaNome = v.nome
-          }
-          continue
-        }
-
-        // Count orari for this class+materia on this day-of-week
-        oreDisponibili += orari.filter(
-          (o) => o.giorno === d && o.classe === selectedClasse && o.materia === selectedMateria
-        ).length
+    const slotClasse = orari.filter((o) => o.classe === selectedClasse && o.materia === selectedMateria)
+    return settimaneScolastiche({
+      da: new Date(),
+      a: parseISO(dataFineScuola),
+      giornoLibero,
+      vacanze,
+    }).map((w) => {
+      const weekEnd = addDays(w.start, 5) // Saturday
+      const ore = w.giorni.reduce(
+        (s, day) => s + slotClasse.filter((o) => o.giorno === giornoIndex(day)).reduce((x, o) => x + (o.ore || 1), 0),
+        0
+      )
+      return {
+        start: w.start,
+        startStr: w.startStr,
+        giorni: w.giorni,
+        label: `${format(w.start, 'd', { locale: it })}–${format(weekEnd, 'd MMM', { locale: it })}`,
+        oreDisponibili: ore,
+        isVacanza: ore === 0 && w.vacanzaGiorni > 0,
+        vacanzaNome: w.vacanzaNome,
+        parzialmenteVacanza: w.vacanzaGiorni > 0 && ore > 0,
       }
-
-      result.push({
-        start: current,
-        startStr,
-        label: `${format(current, 'd', { locale: it })}–${format(weekEnd, 'd MMM', { locale: it })}`,
-        oreDisponibili,
-        isVacanza: oreDisponibili === 0 && vacanzaGiorni > 0,
-        vacanzaNome,
-        parzialmenteVacanza: vacanzaGiorni > 0 && oreDisponibili > 0,
-      })
-
-      current = addDays(current, 7)
-    }
-
-    return result
+    })
   }, [dataFineScuola, selectedClasse, selectedMateria, orari, vacanze, giornoLibero])
 
-  // Total available hours
-  const oreDisponibiliTotali = weeks.reduce((s, w) => s + w.oreDisponibili, 0)
+  // Total available hours — da oggi (i giorni già trascorsi non sono più "disponibili")
+  const oreDisponibiliTotali = useMemo(() => {
+    if (!dataFineScuola || !selectedClasse) return 0
+    return oreDisponibili(orari, {
+      da: new Date(),
+      a: parseISO(dataFineScuola),
+      giornoLibero,
+      vacanze,
+      classe: selectedClasse,
+      materia: selectedMateria,
+    })
+  }, [dataFineScuola, selectedClasse, selectedMateria, orari, vacanze, giornoLibero])
 
   // Current distribution for selected class
   const classeDistribuzioni = useMemo(() => distribuzioni[selectedClasse] || {}, [distribuzioni, selectedClasse])
@@ -311,20 +275,15 @@ export default function ProgrammazionePage() {
     if (!dataFineScuola || !selectedClasse) return []
     const result = []
     for (const week of weeks) {
-      for (let d = 0; d < 6; d++) {
-        if (d === giornoLibero) continue
-        const day = addDays(week.start, d)
-        const isVacDay = vacanze.some((v) => {
-          const vStart = parseISO(v.dataInizio)
-          const vEnd = parseISO(v.dataFine)
-          return !isBefore(day, vStart) && !isAfter(day, vEnd)
-        })
-        if (isVacDay) continue
+      // week.giorni: solo giorni scolastici, già senza vacanze/giorno libero
+      // e troncati all'ultimo giorno di scuola
+      for (const day of week.giorni) {
+        const d = giornoIndex(day)
         const daySlots = classeOrarioSlots
           .filter((s) => s.giorno === d)
           .sort((a, b) => (a.numeroOra || 0) - (b.numeroOra || 0))
         for (const slot of daySlots) {
-          const dateStr = format(day, 'yyyy-MM-dd')
+          const dateStr = toDayStr(day)
           const numeroOra = slot.numeroOra || 0
           const key = `${dateStr}_${numeroOra}`
           const ricKey = `${d}-${numeroOra}`
@@ -343,7 +302,7 @@ export default function ProgrammazionePage() {
       }
     }
     return result
-  }, [weeks, classeOrarioSlots, classeRicorrenze, giornoLibero, vacanze, dataFineScuola, selectedClasse])
+  }, [weeks, classeOrarioSlots, classeRicorrenze, dataFineScuola, selectedClasse])
 
   // Group slots by week for display
   const slotsByWeek = useMemo(() => {
@@ -1029,23 +988,9 @@ function PanoramicaView({
 }) {
   const fineScuola = parseISO(dataFineScuola)
 
-  // Compute remaining hours per class+materia
+  // Ore rimaste da oggi alla fine della scuola (stessa logica del dettaglio)
   function computeOreRimaste(classe, materia) {
-    const oggi = new Date()
-    let current = startOfWeek(oggi, { weekStartsOn: 1 })
-    let ore = 0
-    while (isBefore(current, fineScuola)) {
-      for (let d = 0; d < 6; d++) {
-        if (d === giornoLibero) continue
-        const day = addDays(current, d)
-        if (isAfter(day, fineScuola)) continue
-        const isVacDay = vacanze.some((v) => !isBefore(day, parseISO(v.dataInizio)) && !isAfter(day, parseISO(v.dataFine)))
-        if (isVacDay) continue
-        ore += orari.filter((o) => o.giorno === d && o.classe === classe && o.materia === materia).length
-      }
-      current = addDays(current, 7)
-    }
-    return ore
+    return oreDisponibili(orari, { da: new Date(), a: fineScuola, giornoLibero, vacanze, classe, materia })
   }
 
   const rows = assegnazioniTabs.map((a) => {

@@ -2,6 +2,19 @@
   command = "npm run build"
   publish = "dist"
 
+# Header di sicurezza su tutte le pagine.
+# La CSP è tarata su Firebase Auth (popup Google) + Firestore:
+# se dopo un deploy qualcosa si rompe (login, dati), controllare la
+# console del browser per capire quale direttiva blocca cosa.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.googleusercontent.com; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com; frame-src https://*.firebaseapp.com https://accounts.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
 # Cache asset hashati (JS/CSS/immagini) per 1 anno
 [[headers]]
   for = "/assets/*"

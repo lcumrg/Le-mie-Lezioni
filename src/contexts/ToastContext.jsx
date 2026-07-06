@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState } from 'react'
+import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 
 const ToastContext = createContext(null)
 
@@ -27,24 +27,27 @@ export function ToastProvider({ children }) {
     setToasts((prev) => prev.filter((t) => t.id !== id))
   }, [])
 
-  const toast = useCallback({
-    info: (msg, dur) => addToast(msg, 'info', dur),
-    success: (msg, dur) => addToast(msg, 'success', dur),
-    error: (msg, dur) => addToast(msg, 'error', dur ?? 6000),
-    warning: (msg, dur) => addToast(msg, 'warning', dur),
-    action: (msg, { label, onClick }) => addToast(msg, 'success', 5000, { label, onClick }),
+  const toast = useMemo(() => {
+    const fn = (msg, type, dur) => addToast(msg, type, dur)
+    fn.info = (msg, dur) => addToast(msg, 'info', dur)
+    fn.success = (msg, dur) => addToast(msg, 'success', dur)
+    fn.error = (msg, dur) => addToast(msg, 'error', dur ?? 6000)
+    fn.warning = (msg, dur) => addToast(msg, 'warning', dur)
+    // Le azioni (es. "Annulla") possono essere async: una rejection non gestita
+    // lascerebbe l'utente convinto che l'operazione sia riuscita
+    fn.action = (msg, { label, onClick }) =>
+      addToast(msg, 'success', 5000, {
+        label,
+        onClick: () =>
+          Promise.resolve()
+            .then(onClick)
+            .catch(() => fn.error("L'operazione non è riuscita. Riprova.")),
+      })
+    return fn
   }, [addToast])
 
-  // Reassign as function with methods
-  const toastFn = (msg, type, dur) => addToast(msg, type, dur)
-  toastFn.info = toast.info
-  toastFn.success = toast.success
-  toastFn.error = toast.error
-  toastFn.warning = toast.warning
-  toastFn.action = toast.action
-
   return (
-    <ToastContext.Provider value={toastFn}>
+    <ToastContext.Provider value={toast}>
       {children}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </ToastContext.Provider>

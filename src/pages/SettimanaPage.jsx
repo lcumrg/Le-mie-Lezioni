@@ -502,12 +502,14 @@ export default function SettimanaPage() {
   async function handleDeleteLezione(id) {
     const lez = lezioni.find((l) => l.id === id)
     if (!lez) return
+    // Firestore rifiuta i campi undefined: il doc va ricreato senza id
+    const { id: _id, ...datiLezione } = lez
     try {
       await deleteLezione(id)
       if (editingLezione?.id === id) setEditingLezione(null)
       toast.action('Lezione eliminata', {
         label: 'Annulla',
-        onClick: () => addLezione({ ...lez, id: undefined }),
+        onClick: () => addLezione(datiLezione),
       })
     } catch {
       toast.error("Errore durante l'eliminazione della lezione.")

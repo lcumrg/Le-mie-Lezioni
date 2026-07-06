@@ -6,10 +6,12 @@ export default function QuickNote({ value, onSave, placeholder = 'Aggiungi nota.
   const textareaRef = useRef(null)
   const debounceRef = useRef(null)
 
-  // Sync external value changes
-  useEffect(() => {
+  // Sync external value changes (adjust-state-during-render invece di setState nell'effect)
+  const [prevValue, setPrevValue] = useState(value)
+  if (value !== prevValue) {
+    setPrevValue(value)
     if (!editing) setText(value || '')
-  }, [value, editing])
+  }
 
   const save = useCallback(
     (val) => {

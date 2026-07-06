@@ -68,13 +68,9 @@ export default function GlobalSearch() {
     return () => unsubs.forEach((u) => u())
   }, [percorsi])
 
-  // Debounced search
+  // Debounced search (il reset per query corte avviene nell'onChange dell'input)
   useEffect(() => {
-    if (query.length < 2) {
-      setResults([])
-      setOpen(false)
-      return
-    }
+    if (query.length < 2) return
 
     const timer = setTimeout(() => {
       const q = query.toLowerCase()
@@ -189,7 +185,14 @@ export default function GlobalSearch() {
           ref={inputRef}
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            const v = e.target.value
+            setQuery(v)
+            if (v.length < 2) {
+              setResults([])
+              setOpen(false)
+            }
+          }}
           onFocus={() => { if (results.length > 0) setOpen(true) }}
           placeholder="Cerca percorsi, unita, lezioni..."
           className="w-full pl-10 pr-4 py-2.5 bg-inset border border-edge rounded text-sm text-fg placeholder-fg-subtle focus:outline-none focus:ring-1 focus:ring-link/40 focus:border-link"

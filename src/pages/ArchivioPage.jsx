@@ -72,7 +72,7 @@ export default function ArchivioPage() {
           })
         )
         if (!cancelled) setUnitaMap(uMap)
-      } catch (err) {
+      } catch {
         if (!cancelled) toast.error('Errore nel caricamento dell\'archivio')
       } finally {
         if (!cancelled) setLoading(false)
@@ -92,7 +92,7 @@ export default function ArchivioPage() {
     try {
       const count = await clonePercorsiToAnno(cloneConfirm, annoAttivo)
       toast.success(`${count} percorsi clonati nell'anno ${annoAttivo}`)
-    } catch (err) {
+    } catch {
       toast.error('Errore durante la clonazione dei percorsi')
     } finally {
       setCloning(false)

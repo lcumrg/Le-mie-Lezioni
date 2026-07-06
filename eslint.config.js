@@ -15,7 +15,12 @@ export default defineConfig([
     ],
     languageOptions: {
       ecmaVersion: 2020,
-      globals: globals.browser,
+      globals: {
+        ...globals.browser,
+        // Definite in vite.config.js
+        __APP_VERSION__: 'readonly',
+        __BUILD_DATE__: 'readonly',
+      },
       parserOptions: {
         ecmaVersion: 'latest',
         ecmaFeatures: { jsx: true },
@@ -24,6 +29,13 @@ export default defineConfig([
     },
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+    },
+  },
+  {
+    // I context esportano per design provider + hook (useApp, useToast, ...)
+    files: ['src/contexts/**'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
     },
   },
 ])

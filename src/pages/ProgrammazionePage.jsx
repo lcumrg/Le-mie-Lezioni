@@ -94,17 +94,21 @@ export default function ProgrammazionePage() {
   }, [annoAttivo])
 
   // Load unita for percorsi of selected class+materia
-  const classePercorsi = allPercorsi.filter((p) => p.classe === selectedClasse && p.materia === selectedMateria)
+  const classePercorsi = useMemo(
+    () => allPercorsi.filter((p) => p.classe === selectedClasse && p.materia === selectedMateria),
+    [allPercorsi, selectedClasse, selectedMateria]
+  )
+  // Chiave derivata stabile: risottoscrive solo quando cambia l'insieme dei percorsi
+  const classePercorsiIdsKey = useMemo(() => classePercorsi.map((p) => p.id).sort().join(','), [classePercorsi])
   useEffect(() => {
-    if (classePercorsi.length === 0) return
-    const unsubs = []
-    for (const p of classePercorsi) {
-      unsubs.push(onUnita(p.id, (units) => {
-        setUnitaByPercorso((prev) => ({ ...prev, [p.id]: units }))
-      }))
-    }
+    if (!classePercorsiIdsKey) return
+    const unsubs = classePercorsiIdsKey.split(',').map((pId) =>
+      onUnita(pId, (units) => {
+        setUnitaByPercorso((prev) => ({ ...prev, [pId]: units }))
+      })
+    )
     return () => unsubs.forEach((u) => u())
-  }, [classePercorsi.map((p) => p.id).join(',')])
+  }, [classePercorsiIdsKey])
 
   // ── Derived data ──
   // Assegnazioni as classe+materia tabs
@@ -262,10 +266,10 @@ export default function ProgrammazionePage() {
   const oreDisponibiliTotali = weeks.reduce((s, w) => s + w.oreDisponibili, 0)
 
   // Current distribution for selected class
-  const classeDistribuzioni = distribuzioni[selectedClasse] || {}
+  const classeDistribuzioni = useMemo(() => distribuzioni[selectedClasse] || {}, [distribuzioni, selectedClasse])
 
   // Current ricorrenze for selected class
-  const classeRicorrenze = ricorrenze[selectedClasse] || {}
+  const classeRicorrenze = useMemo(() => ricorrenze[selectedClasse] || {}, [ricorrenze, selectedClasse])
 
   // Build orario grid for selected class+materia: array of { giorno, numeroOra, oraInizio, oraFine }
   const classeOrarioSlots = useMemo(() => {
@@ -370,7 +374,7 @@ export default function ProgrammazionePage() {
 
     try {
       await setRicorrenzeClasse(selectedClasse, newRic)
-    } catch (err) {
+    } catch {
       toast.error('Errore durante il salvataggio della ricorrenza.')
     }
   }
@@ -393,7 +397,7 @@ export default function ProgrammazionePage() {
     }
     try {
       await setDistribuzioniClasse(selectedClasse, newDist)
-    } catch (err) {
+    } catch {
       toast.error("Errore durante l'assegnazione.")
     }
   }
@@ -408,7 +412,7 @@ export default function ProgrammazionePage() {
     if (src) { newDist[targetKey] = src } else { delete newDist[targetKey] }
     try {
       await setDistribuzioniClasse(selectedClasse, newDist)
-    } catch (err) {
+    } catch {
       toast.error('Errore durante lo spostamento.')
     }
   }
@@ -454,7 +458,7 @@ export default function ProgrammazionePage() {
       const newDist = buildDistribution(slots, false)
       await setDistribuzioniClasse(selectedClasse, newDist)
       toast.success('Distribuzione completata')
-    } catch (err) {
+    } catch {
       toast.error('Errore durante la distribuzione automatica.')
     } finally {
       setDistributing(false)
@@ -503,7 +507,7 @@ export default function ProgrammazionePage() {
       }
       await setDistribuzioniClasse(selectedClasse, newDistBase)
       toast.success('Distribuzione aggiornata dalle settimane rimanenti')
-    } catch (err) {
+    } catch {
       toast.error('Errore durante la ridistribuzione.')
     } finally {
       setDistributing(false)

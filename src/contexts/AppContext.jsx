@@ -13,12 +13,19 @@ export function AppProvider({ children }) {
   const [config, setConfig] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  // Reset al logout durante il render (evita setState sincrono nell'effect);
+  // il sentinel undefined fa scattare il ramo anche al primo render senza utente
+  const [prevUser, setPrevUser] = useState(undefined)
+  if (user !== prevUser) {
+    setPrevUser(user)
     if (!user) {
       setConfig(null)
       setLoading(false)
-      return
     }
+  }
+
+  useEffect(() => {
+    if (!user) return undefined
 
     const unsubscribe = onAnnoScolasticoConfig((data) => {
       setConfig(data)

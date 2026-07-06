@@ -52,16 +52,17 @@ export default function ExportPage() {
   }, [annoAttivo])
 
   // Load unita for ALL percorsi (needed for global orario export)
+  // Chiave derivata stabile: risottoscrive solo quando cambia l'insieme dei percorsi
+  const percorsoIdsKey = useMemo(() => allPercorsi.map((p) => p.id).sort().join(','), [allPercorsi])
   useEffect(() => {
-    if (allPercorsi.length === 0) return
-    const unsubs = []
-    for (const p of allPercorsi) {
-      unsubs.push(onUnita(p.id, (units) => {
-        setUnitaByPercorso((prev) => ({ ...prev, [p.id]: units }))
-      }))
-    }
+    if (!percorsoIdsKey) return
+    const unsubs = percorsoIdsKey.split(',').map((pId) =>
+      onUnita(pId, (units) => {
+        setUnitaByPercorso((prev) => ({ ...prev, [pId]: units }))
+      })
+    )
     return () => unsubs.forEach((u) => u())
-  }, [allPercorsi.map((p) => p.id).join(',')])
+  }, [percorsoIdsKey])
 
   const classePercorsi = useMemo(
     () => allPercorsi.filter((p) => p.classe === selectedClasse),
@@ -335,7 +336,7 @@ export default function ExportPage() {
   <h1>Orario Settimanale</h1>
   <h2>${weekLabel} — Anno Scolastico ${annoAttivo}</h2>
   ${content.innerHTML}
-  <script>window.print(); window.onafterprint = function() { window.close(); }<\/script>
+  <script>window.print(); window.onafterprint = function() { window.close(); }</script>
 </body></html>`)
     printWindow.document.close()
   }

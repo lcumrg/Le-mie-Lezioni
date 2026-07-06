@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
@@ -94,24 +94,24 @@ export default function OggiPage() {
   }, [annoAttivo, dayOffset])
 
   // Load unita for referenced percorsi
+  // Chiave derivata stabile: risottoscrive solo quando cambia l'insieme dei percorsi
+  const percorsoIdsKey = useMemo(
+    () => [...new Set(lezioni.filter((l) => l.percorsoId).map((l) => l.percorsoId))].sort().join(','),
+    [lezioni]
+  )
   useEffect(() => {
-    const percorsoIds = [...new Set(lezioni.filter((l) => l.percorsoId).map((l) => l.percorsoId))]
-    if (percorsoIds.length === 0) return
-
-    const unsubs = []
-    for (const pId of percorsoIds) {
-      unsubs.push(
-        onUnita(pId, (units) => {
-          setUnitaMap((prev) => {
-            const next = { ...prev }
-            for (const u of units) next[u.id] = u
-            return next
-          })
+    if (!percorsoIdsKey) return
+    const unsubs = percorsoIdsKey.split(',').map((pId) =>
+      onUnita(pId, (units) => {
+        setUnitaMap((prev) => {
+          const next = { ...prev }
+          for (const u of units) next[u.id] = u
+          return next
         })
-      )
-    }
+      })
+    )
     return () => unsubs.forEach((u) => u())
-  }, [lezioni.map((l) => l.percorsoId).filter(Boolean).join(',')])
+  }, [percorsoIdsKey])
 
   // Load assegnazioni + settimana corrente + settimana precedente (solo lunedì)
   useEffect(() => {
@@ -205,7 +205,7 @@ export default function OggiPage() {
           }
         }
       }
-    } catch (err) {
+    } catch {
       toast.error("Errore nell'aggiornamento dello stato della lezione")
     } finally {
       setUpdatingLezioni((prev) => { const s = new Set(prev); s.delete(lezioneId); return s })

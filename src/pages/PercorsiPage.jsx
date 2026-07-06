@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
@@ -95,7 +95,7 @@ export default function PercorsiPage() {
       setInlineTitolo('')
       // Auto-expand the new percorso to add units
       setExpandedId(ref.id)
-    } catch (err) {
+    } catch {
       toast.error('Errore durante la creazione del percorso.')
     }
   }
@@ -114,7 +114,7 @@ export default function PercorsiPage() {
     if (current && trimmed !== (current[field] || '').trim()) {
       try {
         await updatePercorso(id, { [field]: trimmed })
-      } catch (err) {
+      } catch {
         toast.error('Errore durante il salvataggio.')
       }
     }
@@ -126,7 +126,7 @@ export default function PercorsiPage() {
     try {
       await deletePercorso(id)
       if (expandedId === id) setExpandedId(null)
-    } catch (err) {
+    } catch {
       toast.error('Errore durante l\'eliminazione del percorso.')
     }
     setDeleteConfirm(null)
@@ -155,7 +155,7 @@ export default function PercorsiPage() {
     if (trimmed !== currentNote) {
       try {
         await updatePercorso(percorsoId, { note: trimmed })
-      } catch (err) {
+      } catch {
         toast.error('Errore durante il salvataggio delle note.')
       }
     }
@@ -200,7 +200,7 @@ export default function PercorsiPage() {
       toast.success(`Percorso duplicato in ${destClasse} — ${destMateria}.`)
       setDuplicatingId(null)
       setDuplicateClasse('')
-    } catch (err) {
+    } catch {
       toast.error('Errore durante la duplicazione del percorso.')
     } finally {
       setDuplicating(false)
@@ -208,16 +208,17 @@ export default function PercorsiPage() {
   }
 
   // ── Catchup mode: load unita for all percorsi ──
+  // Chiave derivata stabile: risottoscrive solo quando cambia l'insieme dei percorsi
+  const percorsoIdsKey = useMemo(() => percorsi.map((p) => p.id).sort().join(','), [percorsi])
   useEffect(() => {
-    if (!catchupMode || percorsi.length === 0) return
-    const unsubs = []
-    for (const p of percorsi) {
-      unsubs.push(onUnita(p.id, (units) => {
-        setCatchupUnita((prev) => ({ ...prev, [p.id]: units }))
-      }))
-    }
+    if (!catchupMode || !percorsoIdsKey) return
+    const unsubs = percorsoIdsKey.split(',').map((pId) =>
+      onUnita(pId, (units) => {
+        setCatchupUnita((prev) => ({ ...prev, [pId]: units }))
+      })
+    )
     return () => unsubs.forEach((u) => u())
-  }, [catchupMode, percorsi.map((p) => p.id).join(',')])
+  }, [catchupMode, percorsoIdsKey])
 
   async function handleCatchupClick(percorso, clickedIdx) {
     const units = (catchupUnita[percorso.id] || [])

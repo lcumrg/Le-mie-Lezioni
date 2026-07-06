@@ -67,16 +67,18 @@ export default function LessonGrid({
   const validDays = days.filter((d) => !d.isFree).map((d) => d.index)
   const validOre = oreLezione.map((o) => o.numero)
 
-  // When selection changes, populate edit fields
-  useEffect(() => {
+  // When selection changes, populate edit fields (adjust-state-during-render)
+  const [prevSelectedKey, setPrevSelectedKey] = useState(null)
+  if (selectedKey !== prevSelectedKey) {
+    setPrevSelectedKey(selectedKey)
     if (selectedLez) {
       setEditNote(selectedLez.note || '')
       setEditTitolo(selectedLez.titoloOverride || '')
     }
-  }, [selectedKey])
+  }
 
   // Wrapped save with indicator
-  function quickSaveWithIndicator(id, updates) {
+  const quickSaveWithIndicator = useCallback((id, updates) => {
     setSaveStatus('saving')
     clearTimeout(saveStatusRef.current)
     onQuickSave(id, updates)
@@ -85,7 +87,7 @@ export default function LessonGrid({
       setSaveStatus('saved')
       saveStatusRef.current = setTimeout(() => setSaveStatus(null), 1500)
     }, 300)
-  }
+  }, [onQuickSave])
 
   // Cleanup debounce on unmount
   useEffect(() => {
@@ -111,7 +113,7 @@ export default function LessonGrid({
       if (currentTitolo !== (lez.titoloOverride || '').trim()) updates.titoloOverride = currentTitolo
       if (Object.keys(updates).length > 0) quickSaveWithIndicator(lez.id, updates)
     },
-    [editNote, editTitolo, onQuickSave]
+    [editNote, editTitolo, quickSaveWithIndicator]
   )
 
   function handleCellClick(dayIndex, oraNumero) {

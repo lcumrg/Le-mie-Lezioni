@@ -1,4 +1,4 @@
-import { startOfWeek, endOfWeek, startOfDay, endOfDay, isWithinInterval, parseISO } from 'date-fns'
+import { startOfWeek, endOfWeek, startOfDay, endOfDay, isWithinInterval } from 'date-fns'
 
 /**
  * Given the config's settimane array and a date,

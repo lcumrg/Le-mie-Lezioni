@@ -89,7 +89,7 @@ export default function UnitaPanel({ percorso }) {
     if (value !== currentVal) {
       try {
         await updateUnita(percorso.id, id, { [field]: value })
-      } catch (err) {
+      } catch {
         toast.error('Errore durante il salvataggio.')
       }
     }
@@ -144,7 +144,7 @@ export default function UnitaPanel({ percorso }) {
       setNewOre('')
       // Keep focus on the new row for serial creation
       setTimeout(() => newTitoloRef.current?.focus(), 0)
-    } catch (err) {
+    } catch {
       toast.error('Errore durante l\'aggiunta dell\'unita.')
     }
   }
@@ -156,7 +156,7 @@ export default function UnitaPanel({ percorso }) {
     const next = STATO_UNITA_NEXT[u.stato] || STATO_UNITA.DA_FARE
     try {
       await updateUnita(percorso.id, unitaId, { stato: next })
-    } catch (err) {
+    } catch {
       toast.error('Errore durante l\'aggiornamento dello stato.')
     }
   }
@@ -182,7 +182,7 @@ export default function UnitaPanel({ percorso }) {
     try {
       await Promise.all(updates)
       toast.success(`Stato aggiornato: ${targetIdx} completate, 1 in corso`)
-    } catch (err) {
+    } catch {
       toast.error('Errore durante l\'aggiornamento degli stati.')
     }
   }
@@ -202,7 +202,7 @@ export default function UnitaPanel({ percorso }) {
         updateUnita(percorso.id, unita[idx].id, { ordine: swapOrdine }),
         updateUnita(percorso.id, unita[swapIdx].id, { ordine: currentOrdine }),
       ])
-    } catch (err) {
+    } catch {
       toast.error('Errore durante lo spostamento.')
     }
   }
@@ -211,7 +211,7 @@ export default function UnitaPanel({ percorso }) {
   async function handleDelete(unitaId) {
     try {
       await deleteUnita(percorso.id, unitaId)
-    } catch (err) {
+    } catch {
       toast.error('Errore durante l\'eliminazione dell\'unita.')
     }
   }
@@ -233,7 +233,7 @@ export default function UnitaPanel({ percorso }) {
     try {
       await updateUnita(percorso.id, unitaId, { materiali })
       setMatForm({ tipo: 'link', titolo: '', url: '', testo: '' })
-    } catch (err) {
+    } catch {
       toast.error('Errore durante l\'aggiunta del materiale.')
     }
   }
@@ -244,7 +244,7 @@ export default function UnitaPanel({ percorso }) {
     const materiali = (u.materiali || []).filter((_, i) => i !== matIndex)
     try {
       await updateUnita(percorso.id, unitaId, { materiali })
-    } catch (err) {
+    } catch {
       toast.error('Errore durante la rimozione del materiale.')
     }
   }

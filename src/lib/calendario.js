@@ -9,7 +9,7 @@
 // - i giorni viaggiano come stringhe 'YYYY-MM-DD' dove possibile: i confronti
 //   lessicografici coincidono con quelli cronologici e ignorano i fusi orari
 
-import { addDays, format, startOfDay, startOfWeek } from 'date-fns'
+import { addDays, format, parseISO, startOfDay, startOfWeek } from 'date-fns'
 import { STATO_LEZIONE } from './costanti'
 
 export function toDayStr(date) {
@@ -19,6 +19,17 @@ export function toDayStr(date) {
 /** Indice giorno dell'app: lunedì=0 … sabato=5, domenica=6 */
 export function giornoIndex(date) {
   return (date.getDay() + 6) % 7
+}
+
+/**
+ * Primo giorno utile per pianificare o generare: il più tardo tra il
+ * riferimento (tipicamente oggi, o l'inizio della settimana visualizzata)
+ * e il primo giorno di scuola. `dataInizioScuola` è 'YYYY-MM-DD' o null.
+ * In estate evita di contare le settimane prima dell'inizio come disponibili.
+ */
+export function inizioEffettivo(riferimento, dataInizioScuola) {
+  if (!dataInizioScuola) return riferimento
+  return toDayStr(riferimento) < dataInizioScuola ? parseISO(dataInizioScuola) : riferimento
 }
 
 /** La vacanza che copre il giorno ('YYYY-MM-DD'), o null */

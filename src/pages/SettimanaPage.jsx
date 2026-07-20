@@ -22,6 +22,7 @@ import {
   costruisciLezioniDaOrario,
   chiaveLezione,
   oreDisponibiliPerAssegnazione,
+  inizioEffettivo,
 } from '../lib/calendario'
 import {
   STATO_LEZIONE,
@@ -71,6 +72,7 @@ export default function SettimanaPage() {
   // -- Config --
   const oreLezione = useMemo(() => annoConfig?.oreLezione || [], [annoConfig])
   const giornoLibero = annoConfig?.giornoLibero ?? null
+  const dataInizioScuola = annoConfig?.dataInizioScuola || null
   const dataFineScuola = annoConfig?.dataFineScuola || null
   const hasOreConfig = oreLezione.length > 0
 
@@ -186,7 +188,7 @@ export default function SettimanaPage() {
 
     // Le lezioni extra sopravvivono: le loro chiavi bloccano la rigenerazione dello slot
     const { lezioni: nuove, giorniSaltati } = costruisciLezioniDaOrario({
-      da: start,
+      da: inizioEffettivo(start, dataInizioScuola),
       a: addDays(start, 5),
       annoScolastico: annoAttivo,
       orari,
@@ -213,7 +215,7 @@ export default function SettimanaPage() {
     setGenerating(true)
 
     const { lezioni: nuove, giorniSaltati } = costruisciLezioniDaOrario({
-      da: start,
+      da: inizioEffettivo(start, dataInizioScuola),
       a: addDays(start, 5),
       annoScolastico: annoAttivo,
       orari,
@@ -245,16 +247,17 @@ export default function SettimanaPage() {
 
     const fineScuola = dataFineScuola ? parseISO(dataFineScuola) : null
     const totalWeeks = numWeeks === 'end' ? 52 : numWeeks
+    const rangeStart = inizioEffettivo(start, dataInizioScuola)
     let rangeEnd = addDays(start, totalWeeks * 7 - 1)
     if (fineScuola && isBefore(fineScuola, rangeEnd)) rangeEnd = fineScuola
 
     try {
       // Dedup contro il DB sull'intero intervallo: lo stato locale contiene
       // solo la settimana visualizzata, non le settimane successive
-      const esistenti = await getLezioniRange(annoAttivo, start, rangeEnd)
+      const esistenti = await getLezioniRange(annoAttivo, rangeStart, rangeEnd)
 
       const { lezioni: nuove, giorniSaltati } = costruisciLezioniDaOrario({
-        da: start,
+        da: rangeStart,
         a: rangeEnd,
         annoScolastico: annoAttivo,
         orari,
@@ -514,7 +517,7 @@ export default function SettimanaPage() {
     if (fineScuola <= oggi) return null
 
     const orePerClasse = oreDisponibiliPerAssegnazione(orari, {
-      da: oggi,
+      da: inizioEffettivo(oggi, dataInizioScuola),
       a: fineScuola,
       giornoLibero,
       vacanze,
@@ -527,7 +530,7 @@ export default function SettimanaPage() {
         .reduce((s, o) => s + (o.ore || 1), 0)
       return { classe, materia, oreSettimana, totaleOre }
     }).sort((a, b) => a.classe.localeCompare(b.classe))
-  }, [dataFineScuola, orari, vacanze, giornoLibero])
+  }, [dataInizioScuola, dataFineScuola, orari, vacanze, giornoLibero])
 
   // -- Render --
 

@@ -16,7 +16,7 @@ import {
   updateUnita,
 } from '../lib/firestore'
 import { getDayRange } from '../lib/settimane'
-import { costruisciLezioniDaOrario, chiaveLezione, oreDisponibili } from '../lib/calendario'
+import { costruisciLezioniDaOrario, chiaveLezione, oreDisponibili, inizioEffettivo } from '../lib/calendario'
 import {
   STATO_LEZIONE,
   STATO_LEZIONE_SHORT,
@@ -65,6 +65,8 @@ export default function OggiPage() {
 
   const { start, end } = getDayRange(dayOffset)
   const giornoLibero = annoConfig?.giornoLibero ?? null
+  const dataInizioScuola = annoConfig?.dataInizioScuola || null
+  const dataFineScuola = annoConfig?.dataFineScuola || null
 
   // Day info
   const dayDate = start
@@ -153,8 +155,12 @@ export default function OggiPage() {
   // Slots from timetable for this day
   const slotsOggi = orari.filter((o) => o.giorno === dayIndex)
 
-  // Check if we should auto-generate
-  const hasUngenerated = slotsOggi.length > 0 && totale === 0 && !vacanza && dayIndex !== giornoLibero
+  // Check if we should auto-generate — solo per giorni dentro l'anno scolastico
+  const fuoriAnno =
+    (dataInizioScuola && dayStr < dataInizioScuola) ||
+    (dataFineScuola && dayStr > dataFineScuola)
+  const hasUngenerated =
+    slotsOggi.length > 0 && totale === 0 && !vacanza && dayIndex !== giornoLibero && !fuoriAnno
 
   // Auto-generate lessons when conditions are met (Phase 4.2)
   useEffect(() => {
@@ -223,7 +229,7 @@ export default function OggiPage() {
     setGenerating(true)
 
     const { lezioni: nuove } = costruisciLezioniDaOrario({
-      da: dayDate,
+      da: inizioEffettivo(dayDate, dataInizioScuola),
       a: dayDate,
       annoScolastico: annoAttivo,
       orari,
@@ -299,8 +305,14 @@ export default function OggiPage() {
   } : null
 
   // ── Fine anno ──
-  const dataFineScuola = annoConfig?.dataFineScuola || null
-  const settimaneRimaste = dataFineScuola
+  // Il widget compare solo ad anno in corso: né dopo l'ultimo giorno di
+  // scuola (mostrava "0 settimane rimaste" tutta l'estate) né prima del primo
+  const oggiStr = format(new Date(), 'yyyy-MM-dd')
+  const annoInCorso =
+    !!dataFineScuola &&
+    dataFineScuola >= oggiStr &&
+    (!dataInizioScuola || dataInizioScuola <= oggiStr)
+  const settimaneRimaste = annoInCorso
     ? Math.max(0, differenceInWeeks(parseISO(dataFineScuola), new Date()))
     : null
 
@@ -308,7 +320,7 @@ export default function OggiPage() {
   function computeOreRimaste(classe, materia) {
     if (!dataFineScuola) return 0
     return oreDisponibili(orari, {
-      da: new Date(),
+      da: inizioEffettivo(new Date(), dataInizioScuola),
       a: parseISO(dataFineScuola),
       giornoLibero,
       vacanze,

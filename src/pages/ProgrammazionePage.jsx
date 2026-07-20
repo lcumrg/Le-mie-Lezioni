@@ -15,7 +15,7 @@ import {
   setRicorrenzeClasse,
 } from '../lib/firestore'
 import { format, addDays, parseISO, startOfWeek } from 'date-fns'
-import { settimaneScolastiche, oreDisponibili, giornoIndex, toDayStr } from '../lib/calendario'
+import { settimaneScolastiche, oreDisponibili, giornoIndex, toDayStr, inizioEffettivo } from '../lib/calendario'
 import { it } from 'date-fns/locale'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import SlidePanel from '../components/common/SlidePanel'
@@ -61,6 +61,7 @@ export default function ProgrammazionePage() {
   const [dragOverSlot, setDragOverSlot] = useState(null)
 
   const giornoLibero = annoConfig?.giornoLibero ?? null
+  const dataInizioScuola = annoConfig?.dataInizioScuola || null
   const dataFineScuola = annoConfig?.dataFineScuola || null
 
   // ── Load data ──
@@ -193,7 +194,7 @@ export default function ProgrammazionePage() {
     if (!dataFineScuola || !selectedClasse) return []
     const slotClasse = orari.filter((o) => o.classe === selectedClasse && o.materia === selectedMateria)
     return settimaneScolastiche({
-      da: new Date(),
+      da: inizioEffettivo(new Date(), dataInizioScuola),
       a: parseISO(dataFineScuola),
       giornoLibero,
       vacanze,
@@ -214,20 +215,20 @@ export default function ProgrammazionePage() {
         parzialmenteVacanza: w.vacanzaGiorni > 0 && ore > 0,
       }
     })
-  }, [dataFineScuola, selectedClasse, selectedMateria, orari, vacanze, giornoLibero])
+  }, [dataInizioScuola, dataFineScuola, selectedClasse, selectedMateria, orari, vacanze, giornoLibero])
 
   // Total available hours — da oggi (i giorni già trascorsi non sono più "disponibili")
   const oreDisponibiliTotali = useMemo(() => {
     if (!dataFineScuola || !selectedClasse) return 0
     return oreDisponibili(orari, {
-      da: new Date(),
+      da: inizioEffettivo(new Date(), dataInizioScuola),
       a: parseISO(dataFineScuola),
       giornoLibero,
       vacanze,
       classe: selectedClasse,
       materia: selectedMateria,
     })
-  }, [dataFineScuola, selectedClasse, selectedMateria, orari, vacanze, giornoLibero])
+  }, [dataInizioScuola, dataFineScuola, selectedClasse, selectedMateria, orari, vacanze, giornoLibero])
 
   // Current distribution for selected class+materia
   const classeDistribuzioni = useMemo(
@@ -557,6 +558,7 @@ export default function ProgrammazionePage() {
           orari={orari}
           vacanze={vacanze}
           giornoLibero={giornoLibero}
+          dataInizioScuola={dataInizioScuola}
           dataFineScuola={dataFineScuola}
           onSelectClasse={(classe, materia) => { setSelectedClasse(classe); setSelectedMateria(materia); setViewMode('detail') }}
           onOpenPercorso={setSlidePanelPercorso}
@@ -988,15 +990,23 @@ function PanoramicaView({
   orari,
   vacanze,
   giornoLibero,
+  dataInizioScuola,
   dataFineScuola,
   onSelectClasse,
   onOpenPercorso,
 }) {
   const fineScuola = parseISO(dataFineScuola)
 
-  // Ore rimaste da oggi alla fine della scuola (stessa logica del dettaglio)
+  // Ore rimaste da oggi (o dal primo giorno di scuola) alla fine (stessa logica del dettaglio)
   function computeOreRimaste(classe, materia) {
-    return oreDisponibili(orari, { da: new Date(), a: fineScuola, giornoLibero, vacanze, classe, materia })
+    return oreDisponibili(orari, {
+      da: inizioEffettivo(new Date(), dataInizioScuola),
+      a: fineScuola,
+      giornoLibero,
+      vacanze,
+      classe,
+      materia,
+    })
   }
 
   const rows = assegnazioniTabs.map((a) => {

@@ -3,6 +3,7 @@ import { parseISO } from 'date-fns'
 import {
   toDayStr,
   giornoIndex,
+  inizioEffettivo,
   vacanzaDelGiorno,
   isGiornoScolastico,
   giorniScolastici,
@@ -31,6 +32,21 @@ describe('giornoIndex', () => {
     expect(giornoIndex(d('2026-06-01'))).toBe(0)
     expect(giornoIndex(d('2026-06-06'))).toBe(5)
     expect(giornoIndex(d('2026-06-07'))).toBe(6)
+  })
+})
+
+describe('inizioEffettivo', () => {
+  it("in estate parte dal primo giorno di scuola, non da oggi", () => {
+    const risultato = inizioEffettivo(d('2026-07-06'), '2026-09-14')
+    expect(toDayStr(risultato)).toBe('2026-09-14')
+  })
+  it('ad anno iniziato parte dal riferimento', () => {
+    const riferimento = d('2026-10-05')
+    expect(inizioEffettivo(riferimento, '2026-09-14')).toBe(riferimento)
+  })
+  it('senza data di inizio restituisce il riferimento', () => {
+    const riferimento = d('2026-07-06')
+    expect(inizioEffettivo(riferimento, null)).toBe(riferimento)
   })
 })
 

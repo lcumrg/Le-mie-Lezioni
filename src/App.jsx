@@ -16,6 +16,7 @@ const ArchivioPage = lazy(() => import('./pages/ArchivioPage'))
 const ImpostazioniPage = lazy(() => import('./pages/ImpostazioniPage'))
 const ExportPage = lazy(() => import('./pages/ExportPage'))
 const AssenzePage = lazy(() => import('./pages/AssenzePage'))
+const NuovoAnnoPage = lazy(() => import('./pages/NuovoAnnoPage'))
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -60,6 +61,7 @@ function AppRoutes() {
           <Route path="/export" element={<ExportPage />} />
           <Route path="/archivio" element={<ArchivioPage />} />
           <Route path="/impostazioni" element={<ImpostazioniPage />} />
+          <Route path="/nuovo-anno" element={<NuovoAnnoPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

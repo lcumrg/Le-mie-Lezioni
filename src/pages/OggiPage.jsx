@@ -17,6 +17,7 @@ import {
 } from '../lib/firestore'
 import { getDayRange } from '../lib/settimane'
 import { costruisciLezioniDaOrario, chiaveLezione, oreDisponibili, inizioEffettivo } from '../lib/calendario'
+import { annoSuccessivo } from '../lib/anni'
 import {
   STATO_LEZIONE,
   STATO_LEZIONE_SHORT,
@@ -339,10 +340,17 @@ export default function OggiPage() {
     return (
       <div className="text-center py-12">
         <h2 className="text-xl font-semibold text-fg mb-2">Benvenuto!</h2>
-        <p className="text-fg-muted">
-          Configura l'anno scolastico per iniziare.{' '}
+        <p className="text-fg-muted mb-4">Configura l'anno scolastico per iniziare.</p>
+        <button
+          onClick={() => navigate('/nuovo-anno')}
+          className="px-4 py-2 bg-accent text-white text-sm font-medium rounded-sm hover:bg-accent/80"
+        >
+          Prepara l'anno con la procedura guidata
+        </button>
+        <p className="mt-3 text-sm text-fg-subtle">
+          oppure{' '}
           <button onClick={() => navigate('/impostazioni')} className="text-link hover:underline">
-            Vai alle impostazioni
+            vai alle impostazioni
           </button>
         </p>
       </div>
@@ -391,6 +399,21 @@ export default function OggiPage() {
 
       {/* Date label */}
       <p className="text-sm text-fg-muted mb-5 capitalize">{dayLabel}</p>
+
+      {/* -- Anno concluso: invito a preparare il nuovo -- */}
+      {dataFineScuola && dataFineScuola < oggiStr && (
+        <div className="mb-4 px-4 py-3 bg-badge-s border border-accent/30 rounded-sm flex items-center justify-between gap-3">
+          <p className="text-sm text-accent">
+            L'anno <strong>{annoAttivo}</strong> è concluso.
+          </p>
+          <button
+            onClick={() => navigate('/nuovo-anno')}
+            className="px-4 py-1.5 bg-accent text-white text-sm font-medium rounded-sm hover:bg-accent/80 shrink-0"
+          >
+            Prepara il {annoSuccessivo(annoAttivo) || 'nuovo anno'} →
+          </button>
+        </div>
+      )}
 
       {/* -- Vacation banner -- */}
       {vacanza && (

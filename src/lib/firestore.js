@@ -17,6 +17,7 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { db } from './firebase'
+import { STATO_UNITA } from './costanti'
 
 // ── Modalità sola lettura (anno chiuso) ──
 // AppContext la attiva quando l'anno attivo è marcato come chiuso: ogni
@@ -339,43 +340,66 @@ export async function getAssegnazioni(annoScolastico) {
 }
 
 /**
- * Clone percorsi (with their unita) from one anno to another.
- * Unita are copied with stato reset to 'da_fare'.
- * Returns count of cloned percorsi.
+ * Clona i percorsi indicati (con le loro unità, stati azzerati a 'da_fare')
+ * in un altro anno, con eventuale rimappatura della classe per percorso
+ * (chi segue gli stessi studenti: 1A → 2A).
+ * selezioni: [{ percorso: <doc percorso completo>, classeDestinazione? }]
+ * Scritture in writeBatch a blocchi: veloci e senza cloni parziali per blocco.
+ * Ritorna il numero di percorsi clonati.
  */
-export async function clonePercorsiToAnno(annoOrigine, annoDestinazione) {
+export async function clonePercorsiSelezionati(annoDestinazione, selezioni) {
   assertScrivibile()
-  const percorsi = await getPercorsi(annoOrigine)
+  let batch = writeBatch(db)
+  let ops = 0
   let count = 0
 
-  for (const p of percorsi) {
-    // Create new percorso
-    const newPercorsoRef = await addDoc(percorsiRef, {
+  async function commitSePieno() {
+    if (ops >= 400) {
+      await batch.commit()
+      batch = writeBatch(db)
+      ops = 0
+    }
+  }
+
+  for (const { percorso, classeDestinazione } of selezioni) {
+    const newPercorsoRef = doc(percorsiRef)
+    batch.set(newPercorsoRef, {
       annoScolastico: annoDestinazione,
-      classe: p.classe,
-      materia: p.materia || '',
-      titolo: p.titolo,
-      descrizione: p.descrizione || '',
+      classe: classeDestinazione || percorso.classe,
+      materia: percorso.materia || '',
+      titolo: percorso.titolo,
+      descrizione: percorso.descrizione || '',
+      note: percorso.note || '',
       createdAt: serverTimestamp(),
     })
+    ops++
 
-    // Copy unita
-    const unita = await getUnita(p.id)
+    const unita = await getUnita(percorso.id)
     for (const u of unita) {
-      await addDoc(unitaRef(newPercorsoRef.id), {
+      batch.set(doc(unitaRef(newPercorsoRef.id)), {
         titolo: u.titolo,
         descrizione: u.descrizione || '',
-        ordine: u.ordine,
+        ordine: u.ordine ?? 1,
         orePreviste: u.orePreviste || 0,
-        stato: 'da_fare',
+        stato: STATO_UNITA.DA_FARE,
         materiali: u.materiali || [],
       })
+      ops++
+      await commitSePieno()
     }
 
     count++
+    await commitSePieno()
   }
 
+  if (ops > 0) await batch.commit()
   return count
+}
+
+/** Clona tutti i percorsi di un anno nell'altro, senza rimappatura classi. */
+export async function clonePercorsiToAnno(annoOrigine, annoDestinazione) {
+  const percorsi = await getPercorsi(annoOrigine)
+  return clonePercorsiSelezionati(annoDestinazione, percorsi.map((percorso) => ({ percorso })))
 }
 
 // ── Reset: cancella tutti i dati di un anno scolastico ──

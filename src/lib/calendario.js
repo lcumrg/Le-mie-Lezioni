@@ -123,8 +123,10 @@ export function chiaveLezione(dayStr, oraInizio, classe) {
 /**
  * Costruisce i dati delle lezioni da generare per i giorni scolastici in [da, a].
  *
- * Curriculum: le distribuzioni (chiave `${dayStr}_${numeroOra||0}`, per classe)
- * vincono sulle ricorrenze (chiave `${giornoIdx}-${numeroOra||0}`, per classe)
+ * Curriculum: `distribuzioni` e `ricorrenze` sono mappe annidate
+ * { [classe]: { [materia]: { chiaveSlot: {...} } } } (un doc per anno, vedi
+ * firestore.js). Le distribuzioni (chiave `${dayStr}_${numeroOra||0}`)
+ * vincono sulle ricorrenze (chiave `${giornoIdx}-${numeroOra||0}`)
  * perché portano sia il percorso sia l'unità pianificata nella timeline.
  *
  * `existingKeys` (Set di chiaveLezione) evita i duplicati e viene esteso con
@@ -164,8 +166,8 @@ export function costruisciLezioniDaOrario({
       if (existingKeys.has(key)) continue
       existingKeys.add(key)
 
-      const dist = (distribuzioni[slot.classe] || {})[`${dayStr}_${slot.numeroOra || 0}`]
-      const ric = (ricorrenze[slot.classe] || {})[`${idx}-${slot.numeroOra || 0}`]
+      const dist = distribuzioni[slot.classe]?.[slot.materia]?.[`${dayStr}_${slot.numeroOra || 0}`]
+      const ric = ricorrenze[slot.classe]?.[slot.materia]?.[`${idx}-${slot.numeroOra || 0}`]
 
       const percorsoId = dist?.percorsoId || ric?.percorsoId || null
       const unitaId = dist?.unitaId || null

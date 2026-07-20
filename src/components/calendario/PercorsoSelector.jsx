@@ -37,7 +37,7 @@ export default function PercorsoSelector({ percorsi, percorsoId, unitaId, onChan
       )
       // Load linked lessons (for real hours count)
       unsubs.push(
-        onLezioniByPercorso(p.id, (data) => {
+        onLezioniByPercorso(p.id, p.annoScolastico, (data) => {
           setLezioniByPercorso((prev) => ({ ...prev, [p.id]: data }))
         })
       )

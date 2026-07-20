@@ -62,9 +62,9 @@ export default function UnitaPanel({ percorso }) {
       setUnita(data)
       setLoading(false)
     })
-    const unsub2 = onLezioniByPercorso(percorso.id, setLezioniCollegate)
+    const unsub2 = onLezioniByPercorso(percorso.id, percorso.annoScolastico, setLezioniCollegate)
     return () => { unsub1(); unsub2() }
-  }, [percorso.id])
+  }, [percorso.id, percorso.annoScolastico])
 
   // ── Inline editing ──
   function startEdit(unitaId, field, currentValue) {

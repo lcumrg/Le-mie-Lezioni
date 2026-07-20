@@ -91,8 +91,8 @@ export default function OggiPage() {
     unsubs.push(onOrari(annoAttivo, setOrari))
     unsubs.push(onPercorsi(annoAttivo, setPercorsi))
     unsubs.push(onVacanze(annoAttivo, setVacanze))
-    unsubs.push(onRicorrenze(setRicorrenze))
-    unsubs.push(onDistribuzioni(setDistribuzioni))
+    unsubs.push(onRicorrenze(annoAttivo, setRicorrenze))
+    unsubs.push(onDistribuzioni(annoAttivo, setDistribuzioni))
 
     return () => unsubs.forEach((u) => u())
   }, [annoAttivo, dayOffset])

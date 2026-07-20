@@ -7,7 +7,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
-  deleteField,
+  FieldPath,
   query,
   where,
   orderBy,
@@ -199,44 +199,59 @@ export async function deleteVacanza(id) {
   return deleteDoc(doc(db, 'vacanze', id))
 }
 
-// ── Distribuzioni (pianificazione settimanale per classe) ──
+// ── Distribuzioni (unità pianificate per slot) ──
+// Un documento per anno scolastico: config/distribuzioni_{anno} =
+// { [classe]: { [materia]: { 'yyyy-MM-dd_numeroOra': { percorsoId, unitaId, ... } } } }
+// Lo scoping per anno evita che il nuovo anno erediti la pianificazione del
+// precedente; quello per materia evita che due materie della stessa classe
+// si sovrascrivano a vicenda.
 
-export function onDistribuzioni(callback) {
-  return onSnapshot(doc(db, 'config', 'distribuzioni'), (snap) => {
+function distribuzioniDoc(annoScolastico) {
+  return doc(db, 'config', `distribuzioni_${annoScolastico}`)
+}
+
+export function onDistribuzioni(annoScolastico, callback) {
+  return onSnapshot(distribuzioniDoc(annoScolastico), (snap) => {
     callback(snap.exists() ? snap.data() : {})
   })
 }
 
-export async function setDistribuzioniClasse(classe, settimane) {
-  const ref = doc(db, 'config', 'distribuzioni')
-  try {
-    await updateDoc(ref, { [classe]: settimane })
-  } catch {
-    // Document doesn't exist yet, create it
-    await setDoc(ref, { [classe]: settimane })
-  }
+export async function setDistribuzioniClasse(annoScolastico, classe, materia, settimane) {
+  const ref = distribuzioniDoc(annoScolastico)
+  // Il setDoc con merge vuoto crea il doc se manca senza toccare gli altri
+  // campi; updateDoc con FieldPath sostituisce SOLO la mappa di questa
+  // classe+materia (un setDoc senza merge dentro un catch generico azzererebbe
+  // le altre classi al primo errore transitorio)
+  await setDoc(ref, {}, { merge: true })
+  await updateDoc(ref, new FieldPath(classe, materia), settimane)
 }
 
-// ── Ricorrenze (slot giorno/ora → percorso per classe) ──
+// ── Ricorrenze (slot giorno/ora → percorso) ──
+// Stessa struttura per anno: config/ricorrenze_{anno} =
+// { [classe]: { [materia]: { 'giorno-numeroOra': { percorsoId, percorsoTitolo } } } }
 
-export function onRicorrenze(callback) {
-  return onSnapshot(doc(db, 'config', 'ricorrenze'), (snap) => {
+function ricorrenzeDoc(annoScolastico) {
+  return doc(db, 'config', `ricorrenze_${annoScolastico}`)
+}
+
+export function onRicorrenze(annoScolastico, callback) {
+  return onSnapshot(ricorrenzeDoc(annoScolastico), (snap) => {
     callback(snap.exists() ? snap.data() : {})
   })
 }
 
-export async function setRicorrenzeClasse(classe, ricorrenze) {
-  const ref = doc(db, 'config', 'ricorrenze')
-  try {
-    await updateDoc(ref, { [classe]: ricorrenze })
-  } catch {
-    // Document doesn't exist yet, create it
-    await setDoc(ref, { [classe]: ricorrenze })
-  }
+export async function setRicorrenzeClasse(annoScolastico, classe, materia, ricorrenze) {
+  const ref = ricorrenzeDoc(annoScolastico)
+  await setDoc(ref, {}, { merge: true })
+  await updateDoc(ref, new FieldPath(classe, materia), ricorrenze)
 }
 
-export function onLezioniByPercorso(percorsoId, callback) {
-  const q = query(lezioniRef, where('percorsoId', '==', percorsoId))
+export function onLezioniByPercorso(percorsoId, annoScolastico, callback) {
+  const q = query(
+    lezioniRef,
+    where('percorsoId', '==', percorsoId),
+    where('annoScolastico', '==', annoScolastico)
+  )
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
   })
@@ -337,7 +352,8 @@ async function deleteCollectionByAnno(collRef, annoScolastico) {
 /**
  * Deletes all data for a given anno scolastico:
  * assegnazioni, orari, lezioni, vacanze, percorsi (with subcollection unita),
- * ricorrenze and distribuzioni for affected classes.
+ * e i documenti di pianificazione (ricorrenze/distribuzioni) di QUELL'anno.
+ * Gli altri anni non vengono toccati.
  */
 export async function resetAnnoScolastico(annoScolastico) {
   const summary = { assegnazioni: 0, orari: 0, lezioni: 0, vacanze: 0, percorsi: 0, unita: 0 }
@@ -368,32 +384,9 @@ export async function resetAnnoScolastico(annoScolastico) {
   summary.lezioni = await deleteCollectionByAnno(lezioniRef, annoScolastico)
   summary.vacanze = await deleteCollectionByAnno(vacanzeRef, annoScolastico)
 
-  // 3. Clear config docs (ricorrenze, distribuzioni)
-  try {
-    const ricRef = doc(db, 'config', 'ricorrenze')
-    const ricSnap = await getDoc(ricRef)
-    if (ricSnap.exists()) {
-      const data = ricSnap.data()
-      const updates = {}
-      for (const key of Object.keys(data)) {
-        updates[key] = deleteField()
-      }
-      if (Object.keys(updates).length > 0) await updateDoc(ricRef, updates)
-    }
-  } catch { /* ignore */ }
-
-  try {
-    const distRef = doc(db, 'config', 'distribuzioni')
-    const distSnap = await getDoc(distRef)
-    if (distSnap.exists()) {
-      const data = distSnap.data()
-      const updates = {}
-      for (const key of Object.keys(data)) {
-        updates[key] = deleteField()
-      }
-      if (Object.keys(updates).length > 0) await updateDoc(distRef, updates)
-    }
-  } catch { /* ignore */ }
+  // 3. Elimina i doc di pianificazione dell'anno (deleteDoc su doc mancante è un no-op)
+  await deleteDoc(ricorrenzeDoc(annoScolastico))
+  await deleteDoc(distribuzioniDoc(annoScolastico))
 
   return summary
 }

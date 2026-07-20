@@ -98,8 +98,8 @@ export default function SettimanaPage() {
     unsubs.push(onOrari(annoAttivo, setOrari))
     unsubs.push(onVacanze(annoAttivo, setVacanze))
     unsubs.push(onPercorsi(annoAttivo, setPercorsi))
-    unsubs.push(onRicorrenze(setRicorrenze))
-    unsubs.push(onDistribuzioni(setDistribuzioni))
+    unsubs.push(onRicorrenze(annoAttivo, setRicorrenze))
+    unsubs.push(onDistribuzioni(annoAttivo, setDistribuzioni))
 
     return () => unsubs.forEach((u) => u())
   }, [annoAttivo, weekOffset])
@@ -308,10 +308,12 @@ export default function SettimanaPage() {
   }
 
   async function handleSwapLezioni(lezA, lezB) {
-    // Swap curriculum fields between two lessons of the same class
+    // Swap curriculum fields between two lessons of the same class+materia
+    // (le distribuzioni sono per classe+materia: uno scambio tra materie
+    // diverse mescolerebbe i curricula)
     if (!lezA || !lezB || lezA.id === lezB.id) return
-    if (lezA.classe !== lezB.classe) {
-      toast.error('Puoi scambiare solo lezioni della stessa classe')
+    if (lezA.classe !== lezB.classe || lezA.materia !== lezB.materia) {
+      toast.error('Puoi scambiare solo lezioni della stessa classe e materia')
       return
     }
 
@@ -327,7 +329,8 @@ export default function SettimanaPage() {
 
       // Update distribuzioni for both slots
       const classe = lezA.classe
-      const classeDist = { ...(distribuzioni[classe] || {}) }
+      const materia = lezA.materia
+      const classeDist = { ...(distribuzioni[classe]?.[materia] || {}) }
 
       function dateStr(lez) {
         const d = lez.data instanceof Date ? lez.data : lez.data?.toDate ? lez.data.toDate() : new Date(lez.data)
@@ -365,7 +368,7 @@ export default function SettimanaPage() {
         delete classeDist[keyA]
       }
 
-      await setDistribuzioniClasse(classe, classeDist)
+      await setDistribuzioniClasse(annoAttivo, classe, materia, classeDist)
 
       toast.action(`Lezioni ${lezA.classe} scambiate`, {
         label: 'Annulla',
@@ -375,10 +378,10 @@ export default function SettimanaPage() {
             updateLezione(lezB.id, fieldsB),
           ])
           // Restore distribuzioni
-          const restoreDist = { ...(distribuzioni[classe] || {}) }
+          const restoreDist = { ...(distribuzioni[classe]?.[materia] || {}) }
           if (distA) restoreDist[keyA] = distA; else delete restoreDist[keyA]
           if (distB) restoreDist[keyB] = distB; else delete restoreDist[keyB]
-          await setDistribuzioniClasse(classe, restoreDist)
+          await setDistribuzioniClasse(annoAttivo, classe, materia, restoreDist)
         },
       })
     } catch {

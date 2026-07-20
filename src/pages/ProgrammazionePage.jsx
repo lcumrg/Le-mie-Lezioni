@@ -81,8 +81,8 @@ export default function ProgrammazionePage() {
     unsubs.push(onPercorsi(annoAttivo, (all) => setAllPercorsi(all)))
     unsubs.push(onVacanze(annoAttivo, setVacanze))
     unsubs.push(onLezioni(annoAttivo, setAllLezioni))
-    unsubs.push(onDistribuzioni(setDistribuzioni))
-    unsubs.push(onRicorrenze(setRicorrenze))
+    unsubs.push(onDistribuzioni(annoAttivo, setDistribuzioni))
+    unsubs.push(onRicorrenze(annoAttivo, setRicorrenze))
     return () => unsubs.forEach((u) => u())
   }, [annoAttivo])
 
@@ -229,11 +229,17 @@ export default function ProgrammazionePage() {
     })
   }, [dataFineScuola, selectedClasse, selectedMateria, orari, vacanze, giornoLibero])
 
-  // Current distribution for selected class
-  const classeDistribuzioni = useMemo(() => distribuzioni[selectedClasse] || {}, [distribuzioni, selectedClasse])
+  // Current distribution for selected class+materia
+  const classeDistribuzioni = useMemo(
+    () => distribuzioni[selectedClasse]?.[selectedMateria] || {},
+    [distribuzioni, selectedClasse, selectedMateria]
+  )
 
-  // Current ricorrenze for selected class
-  const classeRicorrenze = useMemo(() => ricorrenze[selectedClasse] || {}, [ricorrenze, selectedClasse])
+  // Current ricorrenze for selected class+materia
+  const classeRicorrenze = useMemo(
+    () => ricorrenze[selectedClasse]?.[selectedMateria] || {},
+    [ricorrenze, selectedClasse, selectedMateria]
+  )
 
   // Build orario grid for selected class+materia: array of { giorno, numeroOra, oraInizio, oraFine }
   const classeOrarioSlots = useMemo(() => {
@@ -332,7 +338,7 @@ export default function ProgrammazionePage() {
     }
 
     try {
-      await setRicorrenzeClasse(selectedClasse, newRic)
+      await setRicorrenzeClasse(annoAttivo, selectedClasse, selectedMateria, newRic)
     } catch {
       toast.error('Errore durante il salvataggio della ricorrenza.')
     }
@@ -355,7 +361,7 @@ export default function ProgrammazionePage() {
       }
     }
     try {
-      await setDistribuzioniClasse(selectedClasse, newDist)
+      await setDistribuzioniClasse(annoAttivo, selectedClasse, selectedMateria, newDist)
     } catch {
       toast.error("Errore durante l'assegnazione.")
     }
@@ -370,7 +376,7 @@ export default function ProgrammazionePage() {
     if (tgt) { newDist[sourceKey] = tgt } else { delete newDist[sourceKey] }
     if (src) { newDist[targetKey] = src } else { delete newDist[targetKey] }
     try {
-      await setDistribuzioniClasse(selectedClasse, newDist)
+      await setDistribuzioniClasse(annoAttivo, selectedClasse, selectedMateria, newDist)
     } catch {
       toast.error('Errore durante lo spostamento.')
     }
@@ -415,7 +421,7 @@ export default function ProgrammazionePage() {
     setDistributing(true)
     try {
       const newDist = buildDistribution(slots, false)
-      await setDistribuzioniClasse(selectedClasse, newDist)
+      await setDistribuzioniClasse(annoAttivo, selectedClasse, selectedMateria, newDist)
       toast.success('Distribuzione completata')
     } catch {
       toast.error('Errore durante la distribuzione automatica.')
@@ -464,7 +470,7 @@ export default function ProgrammazionePage() {
           if (count >= (unita.orePreviste || 1)) { unitaIndex++; count = 0 }
         }
       }
-      await setDistribuzioniClasse(selectedClasse, newDistBase)
+      await setDistribuzioniClasse(annoAttivo, selectedClasse, selectedMateria, newDistBase)
       toast.success('Distribuzione aggiornata dalle settimane rimanenti')
     } catch {
       toast.error('Errore durante la ridistribuzione.')

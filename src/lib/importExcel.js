@@ -329,7 +329,11 @@ export async function importToFirestore(data, annoScolastico, oreLezioneConfig) 
   }
 
   for (const [classe, ric] of Object.entries(ricPerClasse)) {
-    await setRicorrenzeClasse(classe, ric)
+    // Le ricorrenze sono per classe+materia: la materia arriva dal foglio
+    // 'Classi e Materie' dello stesso file
+    const materia = materiaMap[classe]
+    if (!materia) continue
+    await setRicorrenzeClasse(annoScolastico, classe, materia, ric)
   }
 
   // 5. Vacanze

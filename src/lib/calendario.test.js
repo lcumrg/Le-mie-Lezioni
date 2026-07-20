@@ -219,8 +219,8 @@ describe('costruisciLezioniDaOrario', () => {
   })
 
   it('le distribuzioni vincono sulle ricorrenze e portano unitaId', () => {
-    const distribuzioni = { '1A': { '2026-06-01_1': { percorsoId: 'P1', unitaId: 'U1' } } }
-    const ricorrenze = { '1A': { '0-1': { percorsoId: 'P2' } } }
+    const distribuzioni = { '1A': { Informatica: { '2026-06-01_1': { percorsoId: 'P1', unitaId: 'U1' } } } }
+    const ricorrenze = { '1A': { Informatica: { '0-1': { percorsoId: 'P2' } } } }
     const { lezioni } = costruisciLezioniDaOrario({ ...base, distribuzioni, ricorrenze })
     const lun1 = lezioni.find((l) => toDayStr(l.data) === '2026-06-01' && l.numeroOra === 1)
     expect(lun1.percorsoId).toBe('P1')
@@ -228,11 +228,20 @@ describe('costruisciLezioniDaOrario', () => {
   })
 
   it('senza distribuzione si applica la ricorrenza (solo percorso, mai unità)', () => {
-    const ricorrenze = { '1A': { '0-2': { percorsoId: 'P2' } } }
+    const ricorrenze = { '1A': { Informatica: { '0-2': { percorsoId: 'P2' } } } }
     const { lezioni } = costruisciLezioniDaOrario({ ...base, ricorrenze })
     const lun2 = lezioni.find((l) => toDayStr(l.data) === '2026-06-01' && l.numeroOra === 2)
     expect(lun2.percorsoId).toBe('P2')
     expect(lun2.unitaId).toBeUndefined()
+  })
+
+  it('il curriculum di una materia non contamina le altre materie della stessa classe', () => {
+    // 2B ha Matematica: una ricorrenza registrata per un'altra materia
+    // della stessa classe non deve agganciarsi
+    const ricorrenze = { '2B': { Fisica: { '2-3': { percorsoId: 'P9' } } } }
+    const { lezioni } = costruisciLezioniDaOrario({ ...base, ricorrenze })
+    const mer2B = lezioni.find((l) => l.classe === '2B' && l.numeroOra === 3)
+    expect(mer2B.percorsoId).toBeUndefined()
   })
 
   it('salta le vacanze contandole, il giorno libero senza contarlo', () => {

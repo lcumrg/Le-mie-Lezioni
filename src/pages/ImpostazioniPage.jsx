@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
 import {
@@ -20,20 +21,10 @@ import {
 } from '../lib/costanti'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ConfirmDialog from '../components/common/ConfirmDialog'
-
-function generateDefaultOre(count, startTime = '08:00') {
-  const ore = []
-  let [h, m] = startTime.split(':').map(Number)
-  for (let i = 0; i < count; i++) {
-    const inizio = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-    h += 1
-    const fine = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-    ore.push({ numero: i + 1, inizio, fine })
-  }
-  return ore
-}
-
-const ANNO_PATTERN = /^\d{4}-\d{4}$/
+import AssegnazioniEditor from '../components/impostazioni/AssegnazioniEditor'
+import OreScolasticheEditor from '../components/impostazioni/OreScolasticheEditor'
+import OrarioEditor from '../components/impostazioni/OrarioEditor'
+import { isAnnoValido } from '../lib/anni'
 
 export default function ImpostazioniPage() {
   const { annoAttivo, annoConfig, config, loading: configLoading } = useApp()
@@ -41,8 +32,6 @@ export default function ImpostazioniPage() {
   const [annoInput, setAnnoInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [assegnazioni, setAssegnazioni] = useState([])
-  const [nuovaClasse, setNuovaClasse] = useState('')
-  const [nuovaMateria, setNuovaMateria] = useState('')
   const [oreLezione, setOreLezione] = useState([])
   const [giornoLibero, setGiornoLibero] = useState(null)
   const [dataInizioScuola, setDataInizioScuola] = useState('')
@@ -61,15 +50,19 @@ export default function ImpostazioniPage() {
   useEffect(() => { if (!annoAttivo) return; const u1 = onAssegnazioni(annoAttivo, setAssegnazioni); const u2 = onOrari(annoAttivo, setOrari); return () => { u1(); u2() } }, [annoAttivo])
   useEffect(() => { if (annoAttivo) setAnnoInput(annoAttivo) }, [annoAttivo])
   useEffect(() => { if (annoConfig?.oreLezione) setOreLezione(annoConfig.oreLezione); setGiornoLibero(annoConfig?.giornoLibero ?? null); setDataInizioScuola(annoConfig?.dataInizioScuola || ''); setDataFineScuola(annoConfig?.dataFineScuola || '') }, [annoConfig])
-  useEffect(() => { if (giornoLibero !== null && orarioForm.giorno === giornoLibero) { const fv = [0,1,2,3,4,5].find((g) => g !== giornoLibero); setOrarioForm((f) => ({ ...f, giorno: fv ?? 0 })) } }, [giornoLibero])
+  // Deep-link alle sezioni: /impostazioni#ore, #orario, #classi, #anno, #import, #reset
+  const location = useLocation()
+  useEffect(() => {
+    if (!configLoading && location.hash) {
+      document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [location.hash, configLoading])
 
   async function handleSaveAnno(e) {
     e.preventDefault()
     const value = annoInput.trim()
     if (!value) return
-    if (!ANNO_PATTERN.test(value)) { toast.error('Formato anno non valido. Usa il formato: 2025-2026'); return }
-    const [y1, y2] = value.split('-').map(Number)
-    if (y2 !== y1 + 1) { toast.error('Gli anni devono essere consecutivi (es. 2026-2027)'); return }
+    if (!isAnnoValido(value)) { toast.error('Formato anno non valido: servono due anni consecutivi, es. 2026-2027'); return }
     setSaving(true)
     try {
       await setAnnoScolasticoConfig({ annoAttivo: value, anniScolastici: { ...(config?.anniScolastici || {}), [value]: config?.anniScolastici?.[value] || {} } })
@@ -103,12 +96,10 @@ export default function ImpostazioniPage() {
       toast.error("Errore durante la rimozione dell'anno")
     }
   }
-  async function handleAddAssegnazione(e) { e.preventDefault(); if (!nuovaClasse.trim() || !nuovaMateria.trim() || !annoAttivo) return; try { await addAssegnazione({ annoScolastico: annoAttivo, classe: nuovaClasse.trim().toUpperCase(), materia: nuovaMateria.trim(), attiva: true, archiviata: false }); setNuovaClasse(''); setNuovaMateria(''); toast.success('Assegnazione aggiunta') } catch { toast.error('Errore nell\'aggiunta dell\'assegnazione') } }
+  async function handleAddAssegnazione(classe, materia) { if (!classe || !materia || !annoAttivo) return; try { await addAssegnazione({ annoScolastico: annoAttivo, classe, materia, attiva: true, archiviata: false }); toast.success('Assegnazione aggiunta') } catch { toast.error('Errore nell\'aggiunta dell\'assegnazione') } }
   function handleDeleteAssegnazione(id) { const a = assegnazioni.find((x) => x.id === id); setDeleteConfirm({ open: true, id, type: 'assegnazione', label: a ? `${a.classe} — ${a.materia}` : 'questa assegnazione' }) }
-  function handleSetNumeroOre(count) { if (oreLezione.length === 0) { setOreLezione(generateDefaultOre(count)) } else if (count > oreLezione.length) { const last = oreLezione[oreLezione.length - 1]; const additional = generateDefaultOre(count - oreLezione.length, last.fine); const renumbered = additional.map((o, i) => ({ ...o, numero: oreLezione.length + i + 1 })); setOreLezione([...oreLezione, ...renumbered]) } else { setOreLezione(oreLezione.slice(0, count)) } }
-  function handleOraChange(index, field, value) { setOreLezione((prev) => prev.map((o, i) => (i === index ? { ...o, [field]: value } : o))) }
   async function handleSaveOreConfig() { if (!annoAttivo) return; setSavingOre(true); try { await setAnnoScolasticoConfig({ anniScolastici: { ...(config?.anniScolastici || {}), [annoAttivo]: { ...(config?.anniScolastici?.[annoAttivo] || {}), oreLezione, giornoLibero, dataInizioScuola: dataInizioScuola || null, dataFineScuola: dataFineScuola || null } } }); toast.success('Configurazione ore salvata') } catch { toast.error('Errore nel salvataggio della configurazione ore') } finally { setSavingOre(false) } }
-  async function handleAddOrario(e) { e.preventDefault(); if (!orarioForm.classe || !orarioForm.materia || !annoAttivo) return; const oraConfig = oreLezione.find((o) => o.numero === orarioForm.numeroOra); if (!oraConfig) return; try { await addOrario({ annoScolastico: annoAttivo, giorno: orarioForm.giorno, numeroOra: orarioForm.numeroOra, oraInizio: oraConfig.inizio, oraFine: oraConfig.fine, classe: orarioForm.classe, materia: orarioForm.materia, ore: 1 }); setOrarioForm((f) => ({ ...f, classe: '', materia: '' })); toast.success('Orario aggiunto') } catch { toast.error('Errore nell\'aggiunta dell\'orario') } }
+  async function handleAddOrario({ giorno, numeroOra, classe, materia }) { if (!classe || !materia || !annoAttivo) return; const oraConfig = oreLezione.find((o) => o.numero === numeroOra); if (!oraConfig) return; try { await addOrario({ annoScolastico: annoAttivo, giorno, numeroOra, oraInizio: oraConfig.inizio, oraFine: oraConfig.fine, classe, materia, ore: 1 }); toast.success('Orario aggiunto') } catch { toast.error('Errore nell\'aggiunta dell\'orario') } }
   function handleDeleteOrario(id) { const o = orari.find((x) => x.id === id); setDeleteConfirm({ open: true, id, type: 'orario', label: o ? `${GIORNI_SHORT[o.giorno]} ${o.numeroOra ? ORE_ROMAN[o.numeroOra - 1] + 'a ora' : o.oraInizio} — ${o.classe}` : 'questo slot orario' }) }
   async function handleConfirmDelete() { const { id, type } = deleteConfirm; setDeleteConfirm({ open: false, id: null, type: '', label: '' }); try { if (type === 'assegnazione') await deleteAssegnazione(id); else if (type === 'orario') await deleteOrario(id) } catch { toast.error('Errore durante l\'eliminazione') } }
   function handleCancelDelete() { setDeleteConfirm({ open: false, id: null, type: '', label: '' }) }
@@ -130,8 +121,20 @@ export default function ImpostazioniPage() {
     <div className="max-w-3xl mx-auto space-y-8">
       <h1 className="text-2xl font-bold text-fg">Impostazioni</h1>
 
-      <section className="bg-surface rounded-sm border border-edge p-6">
+      <section id="anno" className="bg-surface rounded-sm border border-edge p-6 scroll-mt-4">
         <h2 className="text-lg font-semibold text-fg mb-4">Anno Scolastico</h2>
+        <div className="mb-4">
+          <Link
+            to="/nuovo-anno"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white text-sm font-medium rounded-sm hover:bg-accent/80"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+            Prepara il nuovo anno (procedura guidata)
+          </Link>
+          <p className="mt-1 text-xs text-fg-subtle">Ti accompagna passo passo: anno, classi, ore, orario, vacanze e clonazione dei percorsi.</p>
+        </div>
         <form onSubmit={handleSaveAnno} className="flex items-end gap-3">
           <div className="flex-1">
             <label className="block text-sm font-medium text-fg-muted mb-1">Anno attivo</label>
@@ -184,84 +187,34 @@ export default function ImpostazioniPage() {
       </section>
 
       {annoAttivo && (
-        <section className="bg-surface rounded-sm border border-edge p-6">
+        <section id="classi" className="bg-surface rounded-sm border border-edge p-6 scroll-mt-4">
           <h2 className="text-lg font-semibold text-fg mb-4">Classi e Materie</h2>
           <p className="text-sm text-fg-muted mb-4">Aggiungi le classi che insegni quest'anno con la relativa materia.</p>
-          <form onSubmit={handleAddAssegnazione} className="flex items-end gap-3 mb-4">
-            <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1">Classe</label>
-              <input type="text" value={nuovaClasse} onChange={(e) => setNuovaClasse(e.target.value)} placeholder="es. 1A" className="w-24 px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none" />
-            </div>
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-fg-muted mb-1">Materia</label>
-              <input type="text" value={nuovaMateria} onChange={(e) => setNuovaMateria(e.target.value)} placeholder="es. Informatica" className="w-full px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none" />
-            </div>
-            <button type="submit" className="px-4 py-2 bg-link text-white text-sm font-medium rounded-sm hover:bg-link/80">Aggiungi</button>
-          </form>
-          {assegnazioni.length > 0 ? (
-            <div className="space-y-2">
-              {assegnazioni.sort((a, b) => a.classe.localeCompare(b.classe)).map((a) => (
-                <div key={a.id} className="flex items-center justify-between px-3 py-2 bg-overlay rounded-sm">
-                  <span className="text-sm text-fg"><strong>{a.classe}</strong> — {a.materia}</span>
-                  <button onClick={() => handleDeleteAssegnazione(a.id)} className="text-danger/60 hover:text-danger text-sm">Rimuovi</button>
-                </div>
-              ))}
-            </div>
-          ) : <p className="text-sm text-fg-subtle">Nessuna assegnazione ancora.</p>}
+          <AssegnazioniEditor assegnazioni={assegnazioni} onAdd={handleAddAssegnazione} onDelete={handleDeleteAssegnazione} />
         </section>
       )}
 
       {annoAttivo && (
-        <section className="bg-surface rounded-sm border border-edge p-6">
+        <section id="ore" className="bg-surface rounded-sm border border-edge p-6 scroll-mt-4">
           <h2 className="text-lg font-semibold text-fg mb-4">Ore Scolastiche</h2>
           <p className="text-sm text-fg-muted mb-4">Configura gli orari delle ore di lezione giornaliere e il giorno libero.</p>
-          <div className="mb-5">
-            <label className="block text-sm font-medium text-fg-muted mb-2">Ore giornaliere</label>
-            <div className="flex gap-2">
-              {[4, 5, 6, 7, 8].map((n) => (
-                <button key={n} type="button" onClick={() => handleSetNumeroOre(n)} className={`w-10 h-10 rounded-sm text-sm font-semibold transition-colors ${oreLezione.length === n ? 'bg-link text-white' : 'bg-overlay text-fg-muted hover:bg-overlay'}`}>{n}</button>
-              ))}
-            </div>
-          </div>
-          {oreLezione.length > 0 && (
-            <div className="mb-5">
-              <table className="w-full text-sm">
-                <thead><tr className="text-left text-fg-muted border-b border-edge"><th className="pb-2 w-16">Ora</th><th className="pb-2">Inizio</th><th className="pb-2">Fine</th></tr></thead>
-                <tbody>
-                  {oreLezione.map((ora, i) => (
-                    <tr key={i} className="border-b border-edge-muted">
-                      <td className="py-2 font-semibold text-fg">{ORE_ROMAN[i]}</td>
-                      <td className="py-2"><input type="time" value={ora.inizio} onChange={(e) => handleOraChange(i, 'inizio', e.target.value)} className="px-2 py-1 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none" /></td>
-                      <td className="py-2"><input type="time" value={ora.fine} onChange={(e) => handleOraChange(i, 'fine', e.target.value)} className="px-2 py-1 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none" /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <div className="mb-5">
-            <label className="block text-sm font-medium text-fg-muted mb-2">Giorno libero</label>
-            <select value={giornoLibero ?? ''} onChange={(e) => setGiornoLibero(e.target.value === '' ? null : Number(e.target.value))} className="px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none">
-              <option value="">Nessuno</option>
-              {GIORNI_LABEL.map((g, i) => <option key={i} value={i}>{g}</option>)}
-            </select>
-          </div>
-          <div className="mb-5">
-            <label className="block text-sm font-medium text-fg-muted mb-2">Primo giorno di scuola</label>
-            <input type="date" value={dataInizioScuola} onChange={(e) => setDataInizioScuola(e.target.value)} className="px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none" />
-          </div>
-          <div className="mb-5">
-            <label className="block text-sm font-medium text-fg-muted mb-2">Ultimo giorno di scuola</label>
-            <input type="date" value={dataFineScuola} onChange={(e) => setDataFineScuola(e.target.value)} className="px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none" />
-            <p className="mt-1 text-xs text-fg-subtle">Serve per calcolare le ore rimanenti per ogni classe.</p>
-          </div>
+          <OreScolasticheEditor
+            oreLezione={oreLezione}
+            giornoLibero={giornoLibero}
+            dataInizioScuola={dataInizioScuola}
+            dataFineScuola={dataFineScuola}
+            onOreChange={setOreLezione}
+            onGiornoLiberoChange={setGiornoLibero}
+            onDataInizioChange={setDataInizioScuola}
+            onDataFineChange={setDataFineScuola}
+          />
           <button type="button" onClick={handleSaveOreConfig} disabled={savingOre || oreLezione.length === 0} className="px-4 py-2 bg-link text-white text-sm font-medium rounded-sm hover:bg-link/80 disabled:opacity-50">{savingOre ? 'Salvataggio...' : 'Salva configurazione'}</button>
         </section>
       )}
 
 
       {annoAttivo && assegnazioni.length > 0 && (
-        <section className="bg-surface rounded-sm border border-edge p-6">
+        <section id="orario" className="bg-surface rounded-sm border border-edge p-6 scroll-mt-4">
           <h2 className="text-lg font-semibold text-fg mb-4">Orario Settimanale</h2>
           <p className="text-sm text-fg-muted mb-4">Definisci il tuo orario ricorrente. Seleziona giorno, ora e classe.</p>
           {!hasOreConfig && (
@@ -270,28 +223,14 @@ export default function ImpostazioniPage() {
             </div>
           )}
           {hasOreConfig ? (
-            <form onSubmit={handleAddOrario} className="flex flex-wrap items-end gap-3 mb-6">
-              <div>
-                <label className="block text-sm font-medium text-fg-muted mb-1">Giorno</label>
-                <select value={orarioForm.giorno} onChange={(e) => setOrarioForm((f) => ({ ...f, giorno: Number(e.target.value) }))} className="px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none">
-                  {GIORNI_LABEL.map((g, i) => { if (i === giornoLibero) return null; return <option key={i} value={i}>{g}</option> })}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-fg-muted mb-1">Ora</label>
-                <select value={orarioForm.numeroOra} onChange={(e) => setOrarioForm((f) => ({ ...f, numeroOra: Number(e.target.value) }))} className="px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none">
-                  {oreLezione.map((o) => <option key={o.numero} value={o.numero}>{ORE_ROMAN[o.numero - 1]} ({o.inizio}–{o.fine})</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-fg-muted mb-1">Classe — Materia</label>
-                <select value={orarioForm.classe ? `${orarioForm.classe}||${orarioForm.materia}` : ''} onChange={(e) => handleOrarioAssegnazioneChange(e.target.value)} className="px-3 py-2 border border-edge bg-inset text-fg rounded-sm text-sm focus:ring-1 focus:ring-link/40 focus:border-link outline-none">
-                  <option value="">—</option>
-                  {assegnazioniOrdinati.map((a) => <option key={`${a.classe}||${a.materia}`} value={`${a.classe}||${a.materia}`}>{a.classe} — {a.materia}</option>)}
-                </select>
-              </div>
-              <button type="submit" disabled={!orarioForm.classe} className="px-4 py-2 bg-link text-white text-sm font-medium rounded-sm hover:bg-link/80 disabled:opacity-50">Aggiungi</button>
-            </form>
+            <OrarioEditor
+              orari={orari}
+              oreLezione={oreLezione}
+              giornoLibero={giornoLibero}
+              assegnazioni={assegnazioni}
+              onAdd={handleAddOrario}
+              onDelete={handleDeleteOrario}
+            />
           ) : (
             <form onSubmit={async (e) => { e.preventDefault(); if (!orarioForm.classe || !orarioForm.materia || !annoAttivo) return; try { await addOrario({ annoScolastico: annoAttivo, giorno: orarioForm.giorno, oraInizio: orarioForm.oraInizio || '08:00', oraFine: orarioForm.oraFine || '09:00', classe: orarioForm.classe, materia: orarioForm.materia, ore: 1 }); setOrarioForm((f) => ({ ...f, classe: '', materia: '' })); toast.success('Orario aggiunto') } catch { toast.error('Errore nell\'aggiunta dell\'orario') } }} className="flex flex-wrap items-end gap-3 mb-6">
               <div>
@@ -318,6 +257,7 @@ export default function ImpostazioniPage() {
               <button type="submit" disabled={!orarioForm.classe} className="px-4 py-2 bg-link text-white text-sm font-medium rounded-sm hover:bg-link/80 disabled:opacity-50">Aggiungi</button>
             </form>
           )}
+          {!hasOreConfig && (
           <div className="space-y-4">
             {GIORNI_LABEL.map((giornoLabel, gi) => {
               if (gi === giornoLibero) return null
@@ -345,11 +285,12 @@ export default function ImpostazioniPage() {
             {giornoLibero !== null && <div className="px-3 py-2 bg-overlay rounded-sm text-sm text-fg-subtle italic">{GIORNI_LABEL[giornoLibero]} — giorno libero</div>}
             {orari.length === 0 && <p className="text-sm text-fg-subtle">Nessun orario definito. Aggiungi i tuoi slot settimanali sopra.</p>}
           </div>
+          )}
         </section>
       )}
 
       {annoAttivo && (
-        <section className="bg-surface rounded-sm border border-edge p-6">
+        <section id="import" className="bg-surface rounded-sm border border-edge p-6 scroll-mt-4">
           <h2 className="text-lg font-semibold text-fg mb-4">Importa da Excel</h2>
           <p className="text-sm text-fg-muted mb-4">Importa classi, orario, percorsi, ricorrenze e vacanze da un file Excel. I dati vengono <strong>aggiunti</strong> a quelli esistenti (non sostituiti).</p>
           <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -378,7 +319,7 @@ export default function ImpostazioniPage() {
       )}
 
       {annoAttivo && (
-        <section className="bg-surface rounded-sm border border-danger/30 p-6">
+        <section id="reset" className="bg-surface rounded-sm border border-danger/30 p-6 scroll-mt-4">
           <h2 className="text-lg font-semibold text-danger mb-4">Reset Dati Anno</h2>
           <p className="text-sm text-fg-muted mb-4">Cancella <strong>tutti</strong> i dati dell'anno scolastico attivo ({annoAttivo}): classi, orario, percorsi, unita, lezioni, vacanze, ricorrenze e distribuzioni. La configurazione (ore scolastiche, giorno libero, fine scuola) viene mantenuta.</p>
           {!resetConfirm ? (

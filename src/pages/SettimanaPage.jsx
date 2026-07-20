@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
 import {
@@ -541,7 +541,7 @@ export default function SettimanaPage() {
       <div className="text-center py-12">
         <h2 className="text-xl font-semibold text-fg mb-2">Settimana</h2>
         <p className="text-fg-muted">
-          Configura l'anno scolastico nelle Impostazioni per iniziare.
+          Configura l'anno scolastico nelle <Link to="/impostazioni#anno" className="text-link underline">Impostazioni</Link> per iniziare.
         </p>
       </div>
     )
@@ -620,7 +620,7 @@ export default function SettimanaPage() {
           {!hasOrari && (
             <div className="mb-6 p-4 bg-badge-warn border border-warn/30 rounded-sm">
               <p className="text-sm text-warn">
-                Definisci prima il tuo orario settimanale nelle <strong>Impostazioni</strong> per poter generare le lezioni automaticamente.
+                Definisci prima il tuo <Link to="/impostazioni#orario" className="underline font-semibold">orario settimanale</Link> nelle Impostazioni per poter generare le lezioni automaticamente.
               </p>
             </div>
           )}
@@ -677,7 +677,7 @@ export default function SettimanaPage() {
           ) : (
             <div className="mb-6 p-4 bg-badge-warn border border-warn/30 rounded-sm">
               <p className="text-sm text-warn">
-                Configura le <strong>ore scolastiche</strong> nelle Impostazioni per vedere la griglia settimanale.
+                Configura le <Link to="/impostazioni#ore" className="underline font-semibold">ore scolastiche</Link> nelle Impostazioni per vedere la griglia settimanale.
                 In alternativa, usa la vista <button onClick={() => setViewMode('list')} className="underline font-semibold">Lista</button>.
               </p>
             </div>
@@ -717,7 +717,7 @@ export default function SettimanaPage() {
           {!dataFineScuola && orari.length > 0 && (
             <div className="mb-6 p-3 bg-badge-warn border border-warn/30 rounded-sm">
               <p className="text-xs text-warn">
-                Imposta l'<strong>ultimo giorno di scuola</strong> nelle Impostazioni per vedere il calcolo delle ore rimanenti per ogni classe.
+                Imposta l'<Link to="/impostazioni#ore" className="underline font-semibold">ultimo giorno di scuola</Link> nelle Impostazioni per vedere il calcolo delle ore rimanenti per ogni classe.
               </p>
             </div>
           )}

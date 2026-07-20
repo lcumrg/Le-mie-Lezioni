@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
 import { STATO_UNITA, STATO_LEZIONE, GIORNI_SHORT, ORE_EFFETTIVE } from '../lib/costanti'
@@ -487,7 +488,7 @@ export default function ProgrammazionePage() {
       <div className="text-center py-12">
         <h2 className="text-xl font-semibold text-fg mb-2">Programmazione</h2>
         <p className="text-fg-muted">
-          Configura l'anno scolastico nelle Impostazioni per iniziare.
+          Configura l'anno scolastico nelle <Link to="/impostazioni#anno" className="text-link underline">Impostazioni</Link> per iniziare.
         </p>
       </div>
     )
@@ -498,7 +499,7 @@ export default function ProgrammazionePage() {
       <div className="text-center py-12">
         <h2 className="text-xl font-semibold text-fg mb-2">Programmazione</h2>
         <p className="text-fg-muted">
-          Aggiungi le classi nelle Impostazioni per iniziare a programmare.
+          Aggiungi le classi nelle <Link to="/impostazioni#classi" className="text-link underline">Impostazioni</Link> per iniziare a programmare.
         </p>
       </div>
     )
@@ -567,7 +568,7 @@ export default function ProgrammazionePage() {
 
       {viewMode === 'panoramica' && !dataFineScuola && (
         <div className="p-6 bg-surface rounded-sm border border-edge text-center text-sm text-fg-subtle">
-          Configura la data di fine scuola nelle Impostazioni per vedere la panoramica.
+          Configura la <Link to="/impostazioni#ore" className="text-link underline">data di fine scuola</Link> nelle Impostazioni per vedere la panoramica.
         </div>
       )}
 
@@ -619,7 +620,7 @@ export default function ProgrammazionePage() {
       {!dataFineScuola && (
         <div className="mb-6 p-3 bg-badge-warn border border-warn/30 rounded-sm">
           <p className="text-sm text-warn">
-            Imposta l'<strong>ultimo giorno di scuola</strong> e le <strong>ore scolastiche</strong> nelle Impostazioni per vedere la timeline e il bilancio ore.
+            Imposta l'<Link to="/impostazioni#ore" className="underline font-semibold">ultimo giorno di scuola</Link> e le <Link to="/impostazioni#ore" className="underline font-semibold">ore scolastiche</Link> nelle Impostazioni per vedere la timeline e il bilancio ore.
           </p>
         </div>
       )}

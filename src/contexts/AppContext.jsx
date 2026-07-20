@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useState } from 'react'
-import { onAnnoScolasticoConfig, setModalitaSolaLettura } from '../lib/firestore'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { onAnnoScolasticoConfig, setModalitaSolaLettura, setSnapshotErrorHandler } from '../lib/firestore'
 import { useAuth } from './AuthContext'
+import { useToast } from './ToastContext'
 
 const AppContext = createContext(null)
 
@@ -10,8 +11,22 @@ export function useApp() {
 
 export function AppProvider({ children }) {
   const { user } = useAuth()
+  const toast = useToast()
   const [config, setConfig] = useState(null)
   const [loading, setLoading] = useState(true)
+
+  // Un listener Firestore che fallisce (permessi, indice mancante) morirebbe
+  // in silenzio: qui arriva la notifica centralizzata, con throttle anti-spam
+  const ultimoAvvisoRef = useRef(0)
+  useEffect(() => {
+    setSnapshotErrorHandler((err, contesto) => {
+      const ora = Date.now()
+      if (ora - ultimoAvvisoRef.current < 8000) return
+      ultimoAvvisoRef.current = ora
+      toast.error(`Errore di sincronizzazione (${contesto}). Se persiste, ricarica la pagina.`)
+    })
+    return () => setSnapshotErrorHandler(null)
+  }, [toast])
 
   // Reset al logout durante il render (evita setState sincrono nell'effect);
   // il sentinel undefined fa scattare il ramo anche al primo render senza utente

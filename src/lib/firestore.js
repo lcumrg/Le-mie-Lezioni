@@ -36,6 +36,24 @@ function assertScrivibile() {
   }
 }
 
+// ── Notifica errori dei listener realtime ──
+// Un onSnapshot che fallisce (permessi, indice mancante) muore in silenzio
+// e la UI resta su dati stantii: ogni listener passa da qui, che logga e
+// avvisa chi si è registrato (AppContext → toast).
+
+let notificaErrore = null
+
+export function setSnapshotErrorHandler(fn) {
+  notificaErrore = fn
+}
+
+function osserva(riferimento, contesto, next) {
+  return onSnapshot(riferimento, next, (err) => {
+    console.error(`[firestore] listener ${contesto}:`, err)
+    if (notificaErrore) notificaErrore(err, contesto)
+  })
+}
+
 // ── Collection references ──
 
 export const percorsiRef = collection(db, 'percorsi')
@@ -59,7 +77,7 @@ export async function getAnnoScolasticoConfig() {
 }
 
 export function onAnnoScolasticoConfig(callback) {
-  return onSnapshot(doc(db, 'config', 'anno_scolastico'), (snap) => {
+  return osserva(doc(db, 'config', 'anno_scolastico'), 'config anno', (snap) => {
     callback(snap.exists() ? snap.data() : null)
   })
 }
@@ -85,7 +103,7 @@ export async function deleteAnnoScolastico(anno) {
 
 export function onPercorsi(annoScolastico, callback) {
   const q = query(percorsiRef, where('annoScolastico', '==', annoScolastico))
-  return onSnapshot(q, (snap) => {
+  return osserva(q, 'percorsi', (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
   })
 }
@@ -109,7 +127,7 @@ export async function deletePercorso(id) {
 
 export function onUnita(percorsoId, callback) {
   const q = query(unitaRef(percorsoId), orderBy('ordine'))
-  return onSnapshot(q, (snap) => {
+  return osserva(q, 'unità', (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
   })
 }
@@ -133,7 +151,7 @@ export async function deleteUnita(percorsoId, unitaId) {
 
 export function onAssegnazioni(annoScolastico, callback) {
   const q = query(assegnazioniRef, where('annoScolastico', '==', annoScolastico))
-  return onSnapshot(q, (snap) => {
+  return osserva(q, 'assegnazioni', (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
   })
 }
@@ -157,7 +175,7 @@ export async function deleteAssegnazione(id) {
 
 export function onOrari(annoScolastico, callback) {
   const q = query(orariRef, where('annoScolastico', '==', annoScolastico))
-  return onSnapshot(q, (snap) => {
+  return osserva(q, 'orari', (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
   })
 }
@@ -181,7 +199,7 @@ export async function deleteOrario(id) {
 
 export function onLezioni(annoScolastico, callback) {
   const q = query(lezioniRef, where('annoScolastico', '==', annoScolastico))
-  return onSnapshot(q, (snap) => {
+  return osserva(q, 'lezioni', (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
   })
 }
@@ -193,7 +211,7 @@ export function onLezioniSettimana(annoScolastico, inizioSettimana, fineSettiman
     where('data', '>=', inizioSettimana),
     where('data', '<=', fineSettimana)
   )
-  return onSnapshot(q, (snap) => {
+  return osserva(q, 'lezioni settimana', (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
   })
 }
@@ -229,7 +247,7 @@ export async function deleteLezione(id) {
 
 export function onVacanze(annoScolastico, callback) {
   const q = query(vacanzeRef, where('annoScolastico', '==', annoScolastico))
-  return onSnapshot(q, (snap) => {
+  return osserva(q, 'vacanze', (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
   })
 }
@@ -261,7 +279,7 @@ function distribuzioniDoc(annoScolastico) {
 }
 
 export function onDistribuzioni(annoScolastico, callback) {
-  return onSnapshot(distribuzioniDoc(annoScolastico), (snap) => {
+  return osserva(distribuzioniDoc(annoScolastico), 'distribuzioni', (snap) => {
     callback(snap.exists() ? snap.data() : {})
   })
 }
@@ -286,7 +304,7 @@ function ricorrenzeDoc(annoScolastico) {
 }
 
 export function onRicorrenze(annoScolastico, callback) {
-  return onSnapshot(ricorrenzeDoc(annoScolastico), (snap) => {
+  return osserva(ricorrenzeDoc(annoScolastico), 'ricorrenze', (snap) => {
     callback(snap.exists() ? snap.data() : {})
   })
 }
@@ -304,7 +322,7 @@ export function onLezioniByPercorso(percorsoId, annoScolastico, callback) {
     where('percorsoId', '==', percorsoId),
     where('annoScolastico', '==', annoScolastico)
   )
-  return onSnapshot(q, (snap) => {
+  return osserva(q, 'lezioni percorso', (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
   })
 }

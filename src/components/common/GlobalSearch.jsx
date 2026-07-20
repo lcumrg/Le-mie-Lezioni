@@ -47,13 +47,18 @@ export default function GlobalSearch() {
   const containerRef = useRef(null)
   const inputRef = useRef(null)
 
+  // La barra è montata su ogni pagina: i dati (tutti i percorsi, tutte le
+  // lezioni dell'anno, le unità) si caricano solo alla prima ricerca vera,
+  // non al mount — prima scaricava l'intero anno a ogni visita
+  const [attiva, setAttiva] = useState(false)
+
   // Load percorsi + lezioni
   useEffect(() => {
-    if (!annoAttivo) return
+    if (!annoAttivo || !attiva) return
     const unsub1 = onPercorsi(annoAttivo, setPercorsi)
     const unsub2 = onLezioni(annoAttivo, setLezioni)
     return () => { unsub1(); unsub2() }
-  }, [annoAttivo])
+  }, [annoAttivo, attiva])
 
   // Load unita for each percorso
   useEffect(() => {
@@ -188,7 +193,9 @@ export default function GlobalSearch() {
           onChange={(e) => {
             const v = e.target.value
             setQuery(v)
-            if (v.length < 2) {
+            if (v.length >= 2) {
+              setAttiva(true)
+            } else {
               setResults([])
               setOpen(false)
             }

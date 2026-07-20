@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { onAnnoScolasticoConfig } from '../lib/firestore'
+import { onAnnoScolasticoConfig, setModalitaSolaLettura } from '../lib/firestore'
 import { useAuth } from './AuthContext'
 
 const AppContext = createContext(null)
@@ -40,10 +40,18 @@ export function AppProvider({ children }) {
     ? config?.anniScolastici?.[annoAttivo] || null
     : null
 
+  // Anno chiuso → tutte le scritture sui dati vengono bloccate in firestore.js
+  const annoChiuso = !!annoConfig?.chiuso
+  useEffect(() => {
+    setModalitaSolaLettura(annoChiuso)
+    return () => setModalitaSolaLettura(false)
+  }, [annoChiuso])
+
   const value = {
     config,
     annoAttivo,
     annoConfig,
+    annoChiuso,
     loading,
   }
 

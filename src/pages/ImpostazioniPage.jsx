@@ -3,6 +3,7 @@ import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
 import {
   setAnnoScolasticoConfig,
+  deleteAnnoScolastico,
   onAssegnazioni,
   addAssegnazione,
   deleteAssegnazione,
@@ -55,13 +56,53 @@ export default function ImpostazioniPage() {
   const [importing, setImporting] = useState(false)
   const [resetConfirm, setResetConfirm] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const [deleteAnnoConfirm, setDeleteAnnoConfirm] = useState(null)
 
   useEffect(() => { if (!annoAttivo) return; const u1 = onAssegnazioni(annoAttivo, setAssegnazioni); const u2 = onOrari(annoAttivo, setOrari); return () => { u1(); u2() } }, [annoAttivo])
   useEffect(() => { if (annoAttivo) setAnnoInput(annoAttivo) }, [annoAttivo])
   useEffect(() => { if (annoConfig?.oreLezione) setOreLezione(annoConfig.oreLezione); setGiornoLibero(annoConfig?.giornoLibero ?? null); setDataInizioScuola(annoConfig?.dataInizioScuola || ''); setDataFineScuola(annoConfig?.dataFineScuola || '') }, [annoConfig])
   useEffect(() => { if (giornoLibero !== null && orarioForm.giorno === giornoLibero) { const fv = [0,1,2,3,4,5].find((g) => g !== giornoLibero); setOrarioForm((f) => ({ ...f, giorno: fv ?? 0 })) } }, [giornoLibero])
 
-  async function handleSaveAnno(e) { e.preventDefault(); const value = annoInput.trim(); if (!value) return; if (!ANNO_PATTERN.test(value)) { toast.error('Formato anno non valido. Usa il formato: 2025-2026'); return }; setSaving(true); try { await setAnnoScolasticoConfig({ annoAttivo: value, anniScolastici: { ...(config?.anniScolastici || {}), [value]: config?.anniScolastici?.[value] || {} } }); toast.success('Anno scolastico salvato') } catch { toast.error('Errore nel salvataggio dell\'anno scolastico') } finally { setSaving(false) } }
+  async function handleSaveAnno(e) {
+    e.preventDefault()
+    const value = annoInput.trim()
+    if (!value) return
+    if (!ANNO_PATTERN.test(value)) { toast.error('Formato anno non valido. Usa il formato: 2025-2026'); return }
+    const [y1, y2] = value.split('-').map(Number)
+    if (y2 !== y1 + 1) { toast.error('Gli anni devono essere consecutivi (es. 2026-2027)'); return }
+    setSaving(true)
+    try {
+      await setAnnoScolasticoConfig({ annoAttivo: value, anniScolastici: { ...(config?.anniScolastici || {}), [value]: config?.anniScolastici?.[value] || {} } })
+      toast.success('Anno scolastico salvato')
+    } catch {
+      toast.error("Errore nel salvataggio dell'anno scolastico")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleToggleChiusura() {
+    if (!annoAttivo) return
+    const chiuso = !annoConfig?.chiuso
+    try {
+      await setAnnoScolasticoConfig({ anniScolastici: { ...(config?.anniScolastici || {}), [annoAttivo]: { ...(config?.anniScolastici?.[annoAttivo] || {}), chiuso } } })
+      toast.success(chiuso ? `Anno ${annoAttivo} chiuso: consultazione in sola lettura` : `Anno ${annoAttivo} riaperto`)
+    } catch {
+      toast.error("Errore nell'aggiornamento dello stato dell'anno")
+    }
+  }
+
+  async function handleConfirmDeleteAnno() {
+    const anno = deleteAnnoConfirm
+    setDeleteAnnoConfirm(null)
+    if (!anno || anno === annoAttivo) return
+    try {
+      await deleteAnnoScolastico(anno)
+      toast.success(`Anno ${anno} rimosso dall'elenco`)
+    } catch {
+      toast.error("Errore durante la rimozione dell'anno")
+    }
+  }
   async function handleAddAssegnazione(e) { e.preventDefault(); if (!nuovaClasse.trim() || !nuovaMateria.trim() || !annoAttivo) return; try { await addAssegnazione({ annoScolastico: annoAttivo, classe: nuovaClasse.trim().toUpperCase(), materia: nuovaMateria.trim(), attiva: true, archiviata: false }); setNuovaClasse(''); setNuovaMateria(''); toast.success('Assegnazione aggiunta') } catch { toast.error('Errore nell\'aggiunta dell\'assegnazione') } }
   function handleDeleteAssegnazione(id) { const a = assegnazioni.find((x) => x.id === id); setDeleteConfirm({ open: true, id, type: 'assegnazione', label: a ? `${a.classe} — ${a.materia}` : 'questa assegnazione' }) }
   function handleSetNumeroOre(count) { if (oreLezione.length === 0) { setOreLezione(generateDefaultOre(count)) } else if (count > oreLezione.length) { const last = oreLezione[oreLezione.length - 1]; const additional = generateDefaultOre(count - oreLezione.length, last.fine); const renumbered = additional.map((o, i) => ({ ...o, numero: oreLezione.length + i + 1 })); setOreLezione([...oreLezione, ...renumbered]) } else { setOreLezione(oreLezione.slice(0, count)) } }
@@ -98,7 +139,48 @@ export default function ImpostazioniPage() {
           </div>
           <button type="submit" disabled={saving} className="px-4 py-2 bg-link text-white text-sm font-medium rounded-sm hover:bg-link/80 disabled:opacity-50">{saving ? 'Salvataggio...' : 'Salva'}</button>
         </form>
-        {annoAttivo && <p className="mt-2 text-sm text-accent">Anno attivo: <strong>{annoAttivo}</strong></p>}
+        {annoAttivo && (
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <p className="text-sm text-accent">
+              Anno attivo: <strong>{annoAttivo}</strong>
+              {annoConfig?.chiuso && <span className="ml-2 text-warn font-semibold">(chiuso — sola lettura)</span>}
+            </p>
+            <button
+              type="button"
+              onClick={handleToggleChiusura}
+              className={`px-3 py-1.5 text-xs font-medium rounded-sm border transition-colors ${
+                annoConfig?.chiuso
+                  ? 'bg-badge-s text-accent border-accent/30 hover:bg-badge-s/70'
+                  : 'bg-badge-warn text-warn border-warn/30 hover:bg-badge-warn/70'
+              }`}
+            >
+              {annoConfig?.chiuso ? 'Riapri anno' : 'Chiudi anno (sola lettura)'}
+            </button>
+          </div>
+        )}
+        {(() => {
+          const altriAnni = Object.keys(config?.anniScolastici || {}).filter((a) => a !== annoAttivo).sort().reverse()
+          if (altriAnni.length === 0) return null
+          return (
+            <div className="mt-4">
+              <p className="text-sm font-medium text-fg-muted mb-2">Altri anni</p>
+              <div className="space-y-2">
+                {altriAnni.map((a) => (
+                  <div key={a} className="flex items-center justify-between px-3 py-2 bg-overlay rounded-sm">
+                    <span className="text-sm text-fg font-mono">
+                      {a}
+                      {config?.anniScolastici?.[a]?.chiuso && <span className="ml-2 text-xs text-fg-subtle">chiuso</span>}
+                    </span>
+                    <button onClick={() => setDeleteAnnoConfirm(a)} className="text-danger/60 hover:text-danger text-sm">Rimuovi</button>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-fg-subtle">
+                "Rimuovi" toglie l'anno dall'elenco ma non cancella i suoi dati: per eliminarli, attiva l'anno e usa il Reset in fondo alla pagina.
+              </p>
+            </div>
+          )
+        })()}
       </section>
 
       {annoAttivo && (
@@ -315,6 +397,15 @@ export default function ImpostazioniPage() {
       )}
 
       <ConfirmDialog open={deleteConfirm.open} title="Conferma eliminazione" message={`Vuoi eliminare ${deleteConfirm.label}?`} confirmText="Elimina" danger onConfirm={handleConfirmDelete} onCancel={handleCancelDelete} />
+      <ConfirmDialog
+        open={deleteAnnoConfirm !== null}
+        title="Rimuovi anno dall'elenco"
+        message={`Rimuovere l'anno ${deleteAnnoConfirm} dall'elenco? La sua configurazione (ore, date) viene eliminata, ma lezioni, percorsi e gli altri dati restano su Firestore e riappaiono se ricrei lo stesso anno.`}
+        confirmText="Rimuovi"
+        danger
+        onConfirm={handleConfirmDeleteAnno}
+        onCancel={() => setDeleteAnnoConfirm(null)}
+      />
     </div>
   )
 }

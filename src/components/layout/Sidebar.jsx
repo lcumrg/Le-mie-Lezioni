@@ -65,7 +65,9 @@ export default function Sidebar({ open, onClose }) {
                 className="mt-2 w-full px-2 py-1 text-sm text-fg-muted bg-inset border border-edge rounded focus:ring-1 focus:ring-link/40 focus:border-link outline-none cursor-pointer"
               >
                 {anniDisponibili.map((a) => (
-                  <option key={a} value={a}>{a}</option>
+                  <option key={a} value={a}>
+                    {a}{config?.anniScolastici?.[a]?.chiuso ? ' · chiuso' : ''}
+                  </option>
                 ))}
               </select>
             ) : annoAttivo ? (

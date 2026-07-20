@@ -7,6 +7,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   FieldPath,
   query,
   where,
@@ -16,6 +17,23 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { db } from './firebase'
+
+// ── Modalità sola lettura (anno chiuso) ──
+// AppContext la attiva quando l'anno attivo è marcato come chiuso: ogni
+// scrittura sui dati viene bloccata qui, un solo punto, invece che in
+// decine di handler. La config anno resta scrivibile (serve per riaprire).
+
+let annoChiusoAttivo = false
+
+export function setModalitaSolaLettura(attiva) {
+  annoChiusoAttivo = attiva
+}
+
+function assertScrivibile() {
+  if (annoChiusoAttivo) {
+    throw new Error("l'anno attivo è chiuso (sola lettura). Riaprilo dalle Impostazioni per modificarlo.")
+  }
+}
 
 // ── Collection references ──
 
@@ -49,6 +67,19 @@ export async function setAnnoScolasticoConfig(data) {
   return setDoc(doc(db, 'config', 'anno_scolastico'), data, { merge: true })
 }
 
+/**
+ * Rimuove un anno dalla mappa anniScolastici (per anni creati per errore).
+ * NON tocca i dati delle collezioni: eventuali documenti con quell'anno
+ * restano su Firestore e riappaiono ricreando la stessa chiave anno.
+ */
+export async function deleteAnnoScolastico(anno) {
+  return updateDoc(
+    doc(db, 'config', 'anno_scolastico'),
+    new FieldPath('anniScolastici', anno),
+    deleteField()
+  )
+}
+
 // ── Percorsi ──
 
 export function onPercorsi(annoScolastico, callback) {
@@ -59,14 +90,17 @@ export function onPercorsi(annoScolastico, callback) {
 }
 
 export async function addPercorso(data) {
+  assertScrivibile()
   return addDoc(percorsiRef, { ...data, createdAt: serverTimestamp() })
 }
 
 export async function updatePercorso(id, data) {
+  assertScrivibile()
   return updateDoc(doc(db, 'percorsi', id), data)
 }
 
 export async function deletePercorso(id) {
+  assertScrivibile()
   return deleteDoc(doc(db, 'percorsi', id))
 }
 
@@ -80,14 +114,17 @@ export function onUnita(percorsoId, callback) {
 }
 
 export async function addUnita(percorsoId, data) {
+  assertScrivibile()
   return addDoc(unitaRef(percorsoId), data)
 }
 
 export async function updateUnita(percorsoId, unitaId, data) {
+  assertScrivibile()
   return updateDoc(doc(db, 'percorsi', percorsoId, 'unita', unitaId), data)
 }
 
 export async function deleteUnita(percorsoId, unitaId) {
+  assertScrivibile()
   return deleteDoc(doc(db, 'percorsi', percorsoId, 'unita', unitaId))
 }
 
@@ -101,14 +138,17 @@ export function onAssegnazioni(annoScolastico, callback) {
 }
 
 export async function addAssegnazione(data) {
+  assertScrivibile()
   return addDoc(assegnazioniRef, data)
 }
 
 export async function updateAssegnazione(id, data) {
+  assertScrivibile()
   return updateDoc(doc(db, 'assegnazioni', id), data)
 }
 
 export async function deleteAssegnazione(id) {
+  assertScrivibile()
   return deleteDoc(doc(db, 'assegnazioni', id))
 }
 
@@ -122,14 +162,17 @@ export function onOrari(annoScolastico, callback) {
 }
 
 export async function addOrario(data) {
+  assertScrivibile()
   return addDoc(orariRef, data)
 }
 
 export async function updateOrario(id, data) {
+  assertScrivibile()
   return updateDoc(doc(db, 'orari', id), data)
 }
 
 export async function deleteOrario(id) {
+  assertScrivibile()
   return deleteDoc(doc(db, 'orari', id))
 }
 
@@ -167,14 +210,17 @@ export async function getLezioniRange(annoScolastico, inizio, fine) {
 }
 
 export async function addLezione(data) {
+  assertScrivibile()
   return addDoc(lezioniRef, data)
 }
 
 export async function updateLezione(id, data) {
+  assertScrivibile()
   return updateDoc(doc(db, 'lezioni', id), data)
 }
 
 export async function deleteLezione(id) {
+  assertScrivibile()
   return deleteDoc(doc(db, 'lezioni', id))
 }
 
@@ -188,14 +234,17 @@ export function onVacanze(annoScolastico, callback) {
 }
 
 export async function addVacanza(data) {
+  assertScrivibile()
   return addDoc(vacanzeRef, data)
 }
 
 export async function updateVacanza(id, data) {
+  assertScrivibile()
   return updateDoc(doc(db, 'vacanze', id), data)
 }
 
 export async function deleteVacanza(id) {
+  assertScrivibile()
   return deleteDoc(doc(db, 'vacanze', id))
 }
 
@@ -217,6 +266,7 @@ export function onDistribuzioni(annoScolastico, callback) {
 }
 
 export async function setDistribuzioniClasse(annoScolastico, classe, materia, settimane) {
+  assertScrivibile()
   const ref = distribuzioniDoc(annoScolastico)
   // Il setDoc con merge vuoto crea il doc se manca senza toccare gli altri
   // campi; updateDoc con FieldPath sostituisce SOLO la mappa di questa
@@ -241,6 +291,7 @@ export function onRicorrenze(annoScolastico, callback) {
 }
 
 export async function setRicorrenzeClasse(annoScolastico, classe, materia, ricorrenze) {
+  assertScrivibile()
   const ref = ricorrenzeDoc(annoScolastico)
   await setDoc(ref, {}, { merge: true })
   await updateDoc(ref, new FieldPath(classe, materia), ricorrenze)
@@ -293,6 +344,7 @@ export async function getAssegnazioni(annoScolastico) {
  * Returns count of cloned percorsi.
  */
 export async function clonePercorsiToAnno(annoOrigine, annoDestinazione) {
+  assertScrivibile()
   const percorsi = await getPercorsi(annoOrigine)
   let count = 0
 
@@ -356,6 +408,7 @@ async function deleteCollectionByAnno(collRef, annoScolastico) {
  * Gli altri anni non vengono toccati.
  */
 export async function resetAnnoScolastico(annoScolastico) {
+  assertScrivibile()
   const summary = { assegnazioni: 0, orari: 0, lezioni: 0, vacanze: 0, percorsi: 0, unita: 0 }
 
   // 1. Delete percorsi + their unita subcollections

@@ -1,10 +1,12 @@
 import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Link, Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import GlobalSearch from '../common/GlobalSearch'
+import { useApp } from '../../contexts/AppContext'
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { annoAttivo, annoChiuso } = useApp()
 
   return (
     <div className="flex h-screen bg-canvas">
@@ -23,6 +25,18 @@ export default function AppLayout() {
           </button>
           <h1 className="text-lg font-bold text-fg">Le Mie Lezioni</h1>
         </header>
+
+        {/* Banner anno chiuso */}
+        {annoChiuso && (
+          <div className="bg-badge-warn border-b border-warn/30 px-4 py-2 text-center">
+            <p className="text-sm text-warn">
+              Anno <strong>{annoAttivo}</strong> chiuso — consultazione in sola lettura.{' '}
+              <Link to="/impostazioni" className="underline font-semibold hover:text-warn/80">
+                Riapri dalle Impostazioni
+              </Link>
+            </p>
+          </div>
+        )}
 
         {/* Global search */}
         <div className="sticky top-0 z-10 bg-canvas px-4 pt-4 pb-2 md:px-6 md:pt-6 lg:px-8 lg:pt-8">

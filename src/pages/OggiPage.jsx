@@ -41,7 +41,7 @@ const STATO_BADGE = {
 }
 
 export default function OggiPage() {
-  const { annoAttivo, annoConfig, loading: configLoading } = useApp()
+  const { annoAttivo, annoConfig, annoChiuso, loading: configLoading } = useApp()
   const toast = useToast()
   const navigate = useNavigate()
 
@@ -160,7 +160,7 @@ export default function OggiPage() {
     (dataInizioScuola && dayStr < dataInizioScuola) ||
     (dataFineScuola && dayStr > dataFineScuola)
   const hasUngenerated =
-    slotsOggi.length > 0 && totale === 0 && !vacanza && dayIndex !== giornoLibero && !fuoriAnno
+    slotsOggi.length > 0 && totale === 0 && !vacanza && dayIndex !== giornoLibero && !fuoriAnno && !annoChiuso
 
   // Auto-generate lessons when conditions are met (Phase 4.2)
   useEffect(() => {

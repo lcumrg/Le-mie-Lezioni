@@ -1,0 +1,22 @@
+# Header di sicurezza e cache. Vivono qui (e non in netlify.toml) perché
+# i file _headers/_redirects dentro dist/ valgono anche per i deploy
+# manuali (drag&drop o CLI), che non leggono netlify.toml.
+# La CSP è tarata su Firebase Auth (popup Google) + Firestore: se qualcosa
+# si rompe dopo un deploy, guardare la console del browser.
+
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.googleusercontent.com; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com; frame-src https://*.firebaseapp.com https://accounts.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+
+# Asset hashati: cache lunga
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# La shell HTML si rivalida sempre (aggiornamenti immediati)
+/
+  Cache-Control: public, max-age=0, must-revalidate
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate

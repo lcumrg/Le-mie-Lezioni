@@ -213,6 +213,13 @@ export default function LessonGrid({
           onStatoChange(selectedLez.id, STATO_LEZIONE.SALTATA)
         }
         break
+      case 'm':
+      case 'M':
+        if (selectedLez) {
+          e.preventDefault()
+          onStatoChange(selectedLez.id, STATO_LEZIONE.PARZIALE)
+        }
+        break
       case 'Tab': {
         e.preventDefault()
         const dayIdx2 = parseInt(selectedKey.split('_')[0])
@@ -284,8 +291,11 @@ export default function LessonGrid({
   // Drag & drop handlers for swapping lessons
   const dragSourceLez = dragSourceKey ? lessonGrid[dragSourceKey] : null
 
-  function handleDragStart(key, lez) {
+  function handleDragStart(e, key, lez) {
     if (!lez) return
+    // Firefox non avvia il drag senza dati nel dataTransfer
+    e.dataTransfer.setData('text/plain', key)
+    e.dataTransfer.effectAllowed = 'move'
     setDragSourceKey(key)
   }
 
@@ -425,7 +435,7 @@ export default function LessonGrid({
                       <td
                         key={day.index}
                         draggable={!!lez}
-                        onDragStart={() => handleDragStart(key, lez)}
+                        onDragStart={(e) => handleDragStart(e, key, lez)}
                         onDragOver={(e) => handleDragOver(e, key)}
                         onDragLeave={handleDragLeave}
                         onDrop={(e) => handleDrop(e, key)}
@@ -468,7 +478,7 @@ export default function LessonGrid({
               {giornoLibero !== null && (
                 <span>{GIORNI_LABEL[giornoLibero]}: giorno libero · </span>
               )}
-              Trascina per scambiare (stessa classe) · Frecce: naviga · Tab: prossima · S/P/X: stato · Esc: chiudi
+              Trascina per scambiare (stessa classe e materia) · Frecce: naviga · Tab: prossima · S/P/M(½)/X: stato · Esc: chiudi
             </span>
           }
         />

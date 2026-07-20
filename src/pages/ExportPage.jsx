@@ -310,9 +310,44 @@ export default function ExportPage() {
 
   const weekLabel = `${format(weekStart, 'd MMM', { locale: it })} – ${format(weekEnd, 'd MMM yyyy', { locale: it })}`
 
+  // HTML di stampa costruito dai dati con classi semantiche: copiare
+  // l'innerHTML della tabella a schermo (classi Tailwind, non caricate
+  // nella finestra di stampa) lasciava la stampa senza stili
+  function buildPrintHtml() {
+    const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const headCells = allGiorni
+      .map((g) => {
+        const vac = getVacanza(g)
+        const label = `${GIORNI_LABEL[g]} ${format(addDays(weekStart, g), 'd/M')}`
+        const vacLabel = vac
+          ? `<div class="vacanza-label">${esc(TIPO_VACANZA_LABEL[vac.tipo] || 'Non scolastico')}${vac.nome ? ': ' + esc(vac.nome) : ''}</div>`
+          : ''
+        return `<th class="${vac ? 'vacanza-header' : ''}">${esc(label)}${vacLabel}</th>`
+      })
+      .join('')
+    const bodyRows = globalOrarioRows
+      .map((row) => {
+        const cells = allGiorni
+          .map((g) => {
+            const vac = getVacanza(g)
+            const slots = (row[g] || [])
+              .map((o) => {
+                const info = getSlotInfo(o.classe, g, row.ora)
+                return `<div class="slot"><span class="classe">${esc(o.classe)}</span> <span class="materia">${esc(o.materia)}</span>${
+                  info?.percorso ? `<div class="percorso">${esc(info.percorso)}</div>` : ''
+                }${info?.unita ? `<div class="unita">${esc(info.unita)}</div>` : ''}</div>`
+              })
+              .join('')
+            return `<td class="${vac ? 'vacanza-cell' : ''}">${slots}</td>`
+          })
+          .join('')
+        return `<tr><th>${esc(ORE_ROMAN[row.ora - 1] || row.ora)}</th>${cells}</tr>`
+      })
+      .join('')
+    return `<table><thead><tr><th>Ora</th>${headCells}</tr></thead><tbody>${bodyRows}</tbody></table>`
+  }
+
   function handlePrintOrario() {
-    const content = orarioPrintRef.current
-    if (!content) return
     const printWindow = window.open('', '_blank')
     if (!printWindow) {
       toast.error('Il browser ha bloccato la finestra. Consenti i popup per questa pagina.')
@@ -340,7 +375,7 @@ export default function ExportPage() {
 </style></head><body>
   <h1>Orario Settimanale</h1>
   <h2>${weekLabel} — Anno Scolastico ${annoAttivo}</h2>
-  ${content.innerHTML}
+  ${buildPrintHtml()}
   <script>window.print(); window.onafterprint = function() { window.close(); }</script>
 </body></html>`)
     printWindow.document.close()

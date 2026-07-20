@@ -308,9 +308,38 @@ export default function SettimanaPage() {
     setGenerating(false)
   }
 
+  // Tiene la timeline di Programmazione allineata quando percorso/unità di
+  // una lezione cambiano a mano (lo swap lo faceva già, i pannelli no)
+  async function syncDistribuzione(lez, percorsoId, unitaId) {
+    if (!lez || lez.extra) return
+    const { classe, materia } = lez
+    if (!classe || !materia) return
+    const d = lez.data instanceof Date ? lez.data : lez.data?.toDate ? lez.data.toDate() : new Date(lez.data)
+    const key = `${format(d, 'yyyy-MM-dd')}_${lez.numeroOra || 0}`
+    const mappa = { ...(distribuzioni[classe]?.[materia] || {}) }
+    if (percorsoId) {
+      const percorso = percorsoMap[percorsoId]
+      const unita = unitaId ? unitaMap[unitaId] : null
+      mappa[key] = {
+        percorsoId,
+        percorsoTitolo: percorso?.titolo || '',
+        ...(unitaId ? { unitaId, unitaTitolo: unita?.titolo || '' } : {}),
+      }
+    } else {
+      if (!(key in mappa)) return
+      delete mappa[key]
+    }
+    await setDistribuzioniClasse(annoAttivo, classe, materia, mappa)
+  }
+
+  function curriculumCambiato(lez, percorsoId, unitaId) {
+    return (lez.percorsoId || null) !== (percorsoId || null) || (lez.unitaId || null) !== (unitaId || null)
+  }
+
   async function handleSaveEdit() {
     if (!editingLezione) return
     const { id, note, titoloOverride, stato, percorsoId, unitaId } = editingLezione
+    const originale = lezioni.find((l) => l.id === id)
     try {
       await updateLezione(id, {
         note,
@@ -319,6 +348,9 @@ export default function SettimanaPage() {
         percorsoId: percorsoId || null,
         unitaId: unitaId || null,
       })
+      if (originale && curriculumCambiato(originale, percorsoId, unitaId)) {
+        await syncDistribuzione(originale, percorsoId || null, unitaId || null)
+      }
       setEditingLezione(null)
     } catch {
       toast.error('Errore durante il salvataggio della lezione.')
@@ -329,6 +361,12 @@ export default function SettimanaPage() {
   async function handleQuickSave(lezioneId, updates) {
     try {
       await updateLezione(lezioneId, updates)
+      if ('percorsoId' in updates) {
+        const lez = lezioni.find((l) => l.id === lezioneId)
+        if (lez && curriculumCambiato(lez, updates.percorsoId, updates.unitaId)) {
+          await syncDistribuzione(lez, updates.percorsoId || null, updates.unitaId || null)
+        }
+      }
     } catch {
       toast.error('Errore durante il salvataggio.')
     }
@@ -481,27 +519,33 @@ export default function SettimanaPage() {
     return result
   }, [start, vacanze, giornoLibero])
 
-  // Lesson grid for grid view
-  const lessonGrid = useMemo(() => {
+  // Lesson grid for grid view — le lezioni non collocabili (extra con orari
+  // liberi, domenica, celle già occupate) finiscono in fuoriGriglia invece
+  // di sparire in silenzio
+  const { lessonGrid, lezioniFuoriGriglia } = useMemo(() => {
     function getNumeroOra(lez) {
       if (lez.numeroOra) return lez.numeroOra
       const match = oreLezione.find((o) => o.inizio === lez.oraInizio)
       return match ? match.numero : null
     }
 
+    const dayStrs = []
+    for (let i = 0; i < 6; i++) dayStrs.push(format(addDays(start, i), 'yyyy-MM-dd'))
+
     const grid = {}
+    const fuori = []
     for (const lez of lezioni) {
       const data = lez.data instanceof Date ? lez.data : lez.data?.toDate ? lez.data.toDate() : new Date(lez.data)
       const dayStr = format(data, 'yyyy-MM-dd')
-      for (let i = 0; i < 6; i++) {
-        if (format(addDays(start, i), 'yyyy-MM-dd') === dayStr) {
-          const numOra = getNumeroOra(lez)
-          if (numOra) grid[`${i}_${numOra}`] = lez
-          break
-        }
+      const i = dayStrs.indexOf(dayStr)
+      const numOra = i >= 0 ? getNumeroOra(lez) : null
+      if (i >= 0 && numOra && !grid[`${i}_${numOra}`]) {
+        grid[`${i}_${numOra}`] = lez
+      } else {
+        fuori.push(lez)
       }
     }
-    return grid
+    return { lessonGrid: grid, lezioniFuoriGriglia: fuori }
   }, [start, lezioni, oreLezione])
 
   // Days structure for list view (with lessons per day + expected slots)
@@ -525,6 +569,20 @@ export default function SettimanaPage() {
       const vacanza = vacanze.find((v) => dayStr >= v.dataInizio && dayStr <= v.dataFine) || null
 
       result.push({ index: i, date, dayStr, label: GIORNI_LABEL[i], lezioni: dayLezioni, expectedSlots, vacanza })
+    }
+
+    // Domenica: compare solo se ha lezioni (extra), altrimenti resta nascosta
+    const sunDate = addDays(start, 6)
+    const sunStr = format(sunDate, 'yyyy-MM-dd')
+    const sunLezioni = lezioni
+      .filter((lez) => {
+        const d = lez.data instanceof Date ? lez.data : lez.data?.toDate ? lez.data.toDate() : new Date(lez.data)
+        return format(d, 'yyyy-MM-dd') === sunStr
+      })
+      .sort((a, b) => (a.oraInizio || '').localeCompare(b.oraInizio || ''))
+    if (sunLezioni.length > 0) {
+      const vacanza = vacanze.find((v) => sunStr >= v.dataInizio && sunStr <= v.dataFine) || null
+      result.push({ index: 6, date: sunDate, dayStr: sunStr, label: 'Domenica', lezioni: sunLezioni, expectedSlots: [], vacanza })
     }
     return result
   }, [start, lezioni, orari, vacanze])
@@ -706,6 +764,18 @@ export default function SettimanaPage() {
               <p className="text-sm text-warn">
                 Configura le <Link to="/impostazioni#ore" className="underline font-semibold">ore scolastiche</Link> nelle Impostazioni per vedere la griglia settimanale.
                 In alternativa, usa la vista <button onClick={() => setViewMode('list')} className="underline font-semibold">Lista</button>.
+              </p>
+            </div>
+          )}
+
+          {/* Lezioni non collocabili in griglia (extra con orario libero, domenica...) */}
+          {hasOreConfig && lezioniFuoriGriglia.length > 0 && (
+            <div className="mb-6 p-3 bg-badge-warn border border-warn/30 rounded-sm">
+              <p className="text-xs text-warn">
+                {lezioniFuoriGriglia.length === 1 ? '1 lezione non è visibile' : `${lezioniFuoriGriglia.length} lezioni non sono visibili`} in
+                griglia (orario fuori dalle ore configurate, domenica o cella già occupata):{' '}
+                {lezioniFuoriGriglia.map((l) => `${l.classe} ${l.oraInizio || 's.o.'}`).join(', ')}. Le trovi nella
+                vista <button onClick={() => setViewMode('list')} className="underline font-semibold">Lista</button>.
               </p>
             </div>
           )}

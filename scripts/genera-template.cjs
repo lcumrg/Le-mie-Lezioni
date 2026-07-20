@@ -76,7 +76,7 @@ const vacanzeData = [
   ['Nome', 'Data Inizio', 'Data Fine', 'Tipo'],
   ['Vacanze di Natale', '2025-12-23', '2026-01-06', 'vacanza'],
   ['Vacanze di Pasqua', '2026-04-02', '2026-04-07', 'vacanza'],
-  ['Ponte 25 aprile', '2026-04-25', '2026-04-25', 'chiusura'],
+  ['Ponte 25 aprile', '2026-04-25', '2026-04-25', 'vacanza'],
 ]
 const wsVacanze = XLSX.utils.aoa_to_sheet(vacanzeData)
 wsVacanze['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 12 }]
@@ -118,7 +118,7 @@ const istruzioniData = [
   ['── FOGLIO "Vacanze" (opzionale) ──'],
   ['Nome: nome della vacanza/chiusura'],
   ['Data Inizio / Data Fine: formato AAAA-MM-GG (es. 2025-12-23)'],
-  ['Tipo: vacanza | chiusura | assenza'],
+  ['Tipo: vacanza | congedo | malattia'],
 ]
 const wsIstruzioni = XLSX.utils.aoa_to_sheet(istruzioniData)
 wsIstruzioni['!cols'] = [{ wch: 80 }]

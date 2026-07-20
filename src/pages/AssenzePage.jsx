@@ -1,14 +1,14 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
-import { onVacanze, addVacanza, deleteVacanza } from '../lib/firestore'
+import { onVacanze, addVacanza, updateVacanza, deleteVacanza } from '../lib/firestore'
 import { TIPO_VACANZA, TIPO_VACANZA_LABEL } from '../lib/costanti'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ConfirmDialog from '../components/common/ConfirmDialog'
 
 const MESI = [
-  'Settembre', 'Ottobre', 'Novembre', 'Dicembre',
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre',
 ]
 const GIORNI_HDR = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
 
@@ -154,11 +154,34 @@ export default function AssenzePage() {
     const existing = vacanzeMap.get(key)
 
     if (existing) {
-      // Always allow removing — delete the vacanza doc
       try {
-        await deleteVacanza(existing.id)
-        if (existing.dataInizio !== existing.dataFine) {
-          toast.success(`Rimosso periodo "${existing.nome}"`)
+        if (existing.dataInizio === existing.dataFine) {
+          // Giorno singolo: rimuovi il documento
+          await deleteVacanza(existing.id)
+        } else {
+          // Periodo multi-giorno: scorpora SOLO il giorno cliccato,
+          // il resto del periodo sopravvive (prima spariva tutto)
+          const giornoPrima = new Date(date)
+          giornoPrima.setDate(giornoPrima.getDate() - 1)
+          const giornoDopo = new Date(date)
+          giornoDopo.setDate(giornoDopo.getDate() + 1)
+
+          if (key === existing.dataInizio) {
+            await updateVacanza(existing.id, { dataInizio: fmt(giornoDopo) })
+          } else if (key === existing.dataFine) {
+            await updateVacanza(existing.id, { dataFine: fmt(giornoPrima) })
+          } else {
+            // Giorno interno: il periodo si divide in due
+            await updateVacanza(existing.id, { dataFine: fmt(giornoPrima) })
+            await addVacanza({
+              annoScolastico: annoAttivo,
+              nome: existing.nome,
+              dataInizio: fmt(giornoDopo),
+              dataFine: existing.dataFine,
+              tipo: existing.tipo,
+            })
+          }
+          toast.success(`Giorno rimosso da "${existing.nome}"`)
         }
       } catch {
         toast.error('Errore nella rimozione')
@@ -286,7 +309,7 @@ export default function AssenzePage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {months.map(({ year, month }) => {
           const grid = getMonthGrid(year, month)
-          const label = MESI[month >= 8 ? month - 8 : month + 4]
+          const label = MESI[month]
           return (
             <div key={`${year}-${month}`} className="bg-surface rounded-sm border border-edge p-3">
               <h3 className="text-sm font-semibold text-fg mb-2 text-center">
@@ -304,20 +327,28 @@ export default function AssenzePage() {
                   const vac = vacanzeMap.get(key)
                   const isToday = key === today
                   const dow = date.getDay()
-                  const isSunday = dow === 0
+                  // Domenica e giorno libero non sono giorni di scuola: niente click
+                  const giornoIdx = (dow + 6) % 7
+                  const nonCliccabile = dow === 0 || giornoIdx === (annoConfig?.giornoLibero ?? null)
                   const colors = vac ? getColorFor(vac.tipo) : null
 
                   return (
                     <button
                       key={key}
-                      onClick={() => !isSunday && handleDayClick(date)}
-                      disabled={isSunday}
-                      title={vac ? `${TIPO_VACANZA_LABEL[vac.tipo] || vac.tipo}${vac.dataInizio !== vac.dataFine ? ` — ${vac.nome}` : ''} (clicca per rimuovere)` : undefined}
+                      onClick={() => !nonCliccabile && handleDayClick(date)}
+                      disabled={nonCliccabile}
+                      title={
+                        vac
+                          ? `${TIPO_VACANZA_LABEL[vac.tipo] || vac.tipo}${vac.dataInizio !== vac.dataFine ? ` — ${vac.nome}` : ''} (clicca per rimuovere${vac.dataInizio !== vac.dataFine ? ' questo giorno' : ''})`
+                          : nonCliccabile && dow !== 0
+                            ? 'Giorno libero'
+                            : undefined
+                      }
                       className={`
                         relative aspect-square flex items-center justify-center text-xs rounded-sm transition-all
-                        ${isSunday ? 'text-fg-subtle/40 cursor-default' : 'cursor-pointer'}
-                        ${vac && !isSunday ? `${colors.bg} ${colors.text} font-semibold` : ''}
-                        ${!vac && !isSunday ? 'text-fg-muted hover:bg-overlay' : ''}
+                        ${nonCliccabile ? 'text-fg-subtle/40 cursor-default' : 'cursor-pointer'}
+                        ${vac && !nonCliccabile ? `${colors.bg} ${colors.text} font-semibold` : ''}
+                        ${!vac && !nonCliccabile ? 'text-fg-muted hover:bg-overlay' : ''}
                         ${isToday ? 'ring-1 ring-accent ring-offset-1' : ''}
                       `}
                     >

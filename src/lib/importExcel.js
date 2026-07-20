@@ -215,7 +215,7 @@ export function parseExcel(file) {
  * Returns a summary of what was imported.
  */
 export async function importToFirestore(data, annoScolastico, oreLezioneConfig) {
-  const summary = { classi: 0, orario: 0, percorsi: 0, unita: 0, ricorrenze: 0, vacanze: 0 }
+  const summary = { classi: 0, orario: 0, percorsi: 0, unita: 0, ricorrenze: 0, ricorrenzeScartate: 0, vacanze: 0 }
 
   // 1. Assegnazioni (classi)
   for (const c of data.classi) {
@@ -325,6 +325,10 @@ export async function importToFirestore(data, annoScolastico, oreLezioneConfig) 
         percorsoTitolo: r.percorso,
       }
       summary.ricorrenze++
+    } else {
+      // Il percorso citato non è nel foglio 'Percorsi e Unità' di questo file:
+      // prima veniva scartato senza dirlo a nessuno
+      summary.ricorrenzeScartate++
     }
   }
 
@@ -332,7 +336,7 @@ export async function importToFirestore(data, annoScolastico, oreLezioneConfig) 
     // Le ricorrenze sono per classe+materia: la materia arriva dal foglio
     // 'Classi e Materie' dello stesso file
     const materia = materiaMap[classe]
-    if (!materia) continue
+    if (!materia) { summary.ricorrenzeScartate += Object.keys(ric).length; summary.ricorrenze -= Object.keys(ric).length; continue }
     await setRicorrenzeClasse(annoScolastico, classe, materia, ric)
   }
 

@@ -33,6 +33,9 @@ export default function ExportPage() {
   const giornoLibero = annoConfig?.giornoLibero ?? null
   const { start: weekStart, end: weekEnd } = getWeekRange(weekOffset)
 
+  const selectedClasseRef = useRef(null)
+  useEffect(() => { selectedClasseRef.current = selectedClasse }, [selectedClasse])
+
   // ── Load data ──
   useEffect(() => {
     if (!annoAttivo) { setLoading(false); return }
@@ -41,7 +44,9 @@ export default function ExportPage() {
     unsubs.push(onAssegnazioni(annoAttivo, (data) => {
       const active = data.filter((a) => a.attiva && !a.archiviata)
       setAssegnazioni(active)
-      if (!selectedClasse && active.length > 0) setSelectedClasse(active[0].classe)
+      // ref: il callback sopravvive ai render, senza leggerebbe sempre null
+      // e riporterebbe la classe al primo tab a ogni snapshot
+      if (!selectedClasseRef.current && active.length > 0) setSelectedClasse(active[0].classe)
       setLoading(false)
     }))
     unsubs.push(onOrari(annoAttivo, setOrari))

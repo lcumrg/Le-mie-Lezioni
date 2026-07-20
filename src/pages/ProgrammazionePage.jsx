@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../contexts/ToastContext'
@@ -65,6 +65,12 @@ export default function ProgrammazionePage() {
   const dataInizioScuola = annoConfig?.dataInizioScuola || null
   const dataFineScuola = annoConfig?.dataFineScuola || null
 
+  // Il callback dello snapshot vive oltre il primo render: senza il ref
+  // leggerebbe per sempre selectedClasse=null e riporterebbe la selezione
+  // al primo tab a ogni aggiornamento delle assegnazioni
+  const selectedClasseRef = useRef(null)
+  useEffect(() => { selectedClasseRef.current = selectedClasse }, [selectedClasse])
+
   // ── Load data ──
   useEffect(() => {
     if (!annoAttivo) { setLoading(false); return }
@@ -73,7 +79,7 @@ export default function ProgrammazionePage() {
     unsubs.push(onAssegnazioni(annoAttivo, (data) => {
       const active = data.filter((a) => a.attiva && !a.archiviata)
       setAssegnazioni(active)
-      if (!selectedClasse && active.length > 0) {
+      if (!selectedClasseRef.current && active.length > 0) {
         setSelectedClasse(active[0].classe)
         setSelectedMateria(active[0].materia)
       }
@@ -93,17 +99,22 @@ export default function ProgrammazionePage() {
     () => allPercorsi.filter((p) => p.classe === selectedClasse && p.materia === selectedMateria),
     [allPercorsi, selectedClasse, selectedMateria]
   )
-  // Chiave derivata stabile: risottoscrive solo quando cambia l'insieme dei percorsi
-  const classePercorsiIdsKey = useMemo(() => classePercorsi.map((p) => p.id).sort().join(','), [classePercorsi])
+  // Chiave derivata stabile: risottoscrive solo quando cambia l'insieme dei
+  // percorsi. In panoramica servono le unità di TUTTE le classi (senza,
+  // le classi mai aperte in dettaglio mostravano 0 ore e margine gonfiato)
+  const unitaIdsKey = useMemo(
+    () => (viewMode === 'panoramica' ? allPercorsi : classePercorsi).map((p) => p.id).sort().join(','),
+    [viewMode, allPercorsi, classePercorsi]
+  )
   useEffect(() => {
-    if (!classePercorsiIdsKey) return
-    const unsubs = classePercorsiIdsKey.split(',').map((pId) =>
+    if (!unitaIdsKey) return
+    const unsubs = unitaIdsKey.split(',').map((pId) =>
       onUnita(pId, (units) => {
         setUnitaByPercorso((prev) => ({ ...prev, [pId]: units }))
       })
     )
     return () => unsubs.forEach((u) => u())
-  }, [classePercorsiIdsKey])
+  }, [unitaIdsKey])
 
   // ── Derived data ──
   // Assegnazioni as classe+materia tabs
@@ -446,6 +457,14 @@ export default function ProgrammazionePage() {
       // Find remaining units (non-completed)
       const completedIds = new Set(allUnita.filter((u) => u.stato === STATO_UNITA.COMPLETATA).map((u) => u.id))
       const remainingSlots = futureSlots.filter((s) => s.percorsoId)
+      // Ore già svolte per unità (dalle lezioni reali): un'unità in corso
+      // occupa solo le ore che le restano, non tutte le orePreviste
+      const oreSvoltePerUnita = {}
+      for (const l of classeLezioni) {
+        if (!l.unitaId) continue
+        oreSvoltePerUnita[l.unitaId] = (oreSvoltePerUnita[l.unitaId] || 0) + (ORE_EFFETTIVE[l.stato] || 0) * (l.ore || 1)
+      }
+      const oreResidue = (u) => Math.max(0, Math.ceil((u.orePreviste || 1) - (oreSvoltePerUnita[u.id] || 0)))
       // Build a fresh distribution for future slots only
       const slotsByPercorso = {}
       for (const slot of remainingSlots) {
@@ -454,7 +473,7 @@ export default function ProgrammazionePage() {
       }
       for (const [pId, pSlots] of Object.entries(slotsByPercorso)) {
         const units = (unitaByPercorso[pId] || [])
-          .filter((u) => u.stato !== STATO_UNITA.SALTATA && !completedIds.has(u.id))
+          .filter((u) => u.stato !== STATO_UNITA.SALTATA && !completedIds.has(u.id) && oreResidue(u) > 0)
           .slice()
           .sort((a, b) => (a.ordine || 0) - (b.ordine || 0))
         let unitaIndex = 0
@@ -469,7 +488,7 @@ export default function ProgrammazionePage() {
             unitaTitolo: unita.titolo,
           }
           count++
-          if (count >= (unita.orePreviste || 1)) { unitaIndex++; count = 0 }
+          if (count >= oreResidue(unita)) { unitaIndex++; count = 0 }
         }
       }
       await setDistribuzioniClasse(annoAttivo, selectedClasse, selectedMateria, newDistBase)

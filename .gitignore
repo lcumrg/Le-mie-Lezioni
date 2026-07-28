@@ -5,6 +5,10 @@ node_modules/
 dist/
 dist-ssr/
 
+# Firebase (cache locale del deploy)
+.firebase/
+firebase-debug.log
+
 # Environment variables
 .env
 .env.local
